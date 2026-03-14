@@ -1426,6 +1426,29 @@ Tasks: ${day.tasks.map(t => t.description).join('. ')}
 
         modal.querySelector('.btn-download-mindmap').addEventListener('click', downloadMindMap);
 
+        // Position mind map branches in a circle
+        setTimeout(() => {
+            const branches = modal.querySelectorAll('.mindmap-branch');
+            const branchCount = branches.length;
+            if (branchCount > 0) {
+                const container = modal.querySelector('.mindmap-container');
+                const containerRect = container.getBoundingClientRect();
+                const radius = Math.min(containerRect.width, containerRect.height) / 2 - 80;
+                
+                branches.forEach((branch, i) => {
+                    const angle = (360 / branchCount) * i - 90; // Start from top
+                    const angleRad = angle * (Math.PI / 180);
+                    const x = radius * Math.cos(angleRad);
+                    const y = radius * Math.sin(angleRad);
+                    
+                    branch.style.position = 'absolute';
+                    branch.style.left = '50%';
+                    branch.style.top = '50%';
+                    branch.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+                });
+            }
+        }, 100);
+
         // Award points
         addPoints(15);
         
@@ -1480,6 +1503,29 @@ function openFallbackMindMap(day, dayIndex) {
     });
 
     modal.querySelector('.btn-download-mindmap').addEventListener('click', downloadMindMap);
+
+        // Position mind map branches in a circle
+        setTimeout(() => {
+            const branches = modal.querySelectorAll('.mindmap-branch');
+            const branchCount = branches.length;
+            if (branchCount > 0) {
+                const container = modal.querySelector('.mindmap-container');
+                const containerRect = container.getBoundingClientRect();
+                const radius = Math.min(containerRect.width, containerRect.height) / 2 - 80;
+                
+                branches.forEach((branch, i) => {
+                    const angle = (360 / branchCount) * i - 90; // Start from top
+                    const angleRad = angle * (Math.PI / 180);
+                    const x = radius * Math.cos(angleRad);
+                    const y = radius * Math.sin(angleRad);
+                    
+                    branch.style.position = 'absolute';
+                    branch.style.left = '50%';
+                    branch.style.top = '50%';
+                    branch.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+                });
+            }
+        }, 100);
     
     addPoints(15);
 }

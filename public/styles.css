@@ -1302,11 +1302,17 @@ footer {
 
 .mindmap-branch {
     position: absolute;
-    transform-origin: center;
+    top: 50%;
+    left: 50%;
+    transform-origin: center center;
     padding: 0.75rem 1.5rem;
     background: var(--surface-light);
     border-radius: 20px;
-    border: 1px solid var(--border);
+    border: 2px solid var(--border);
+    max-width: 200px;
+    text-align: center;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    transition: all 0.3s ease;
 }
 
 .mindmap-node {
