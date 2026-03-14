@@ -19,9 +19,18 @@ export async function onRequestPost(context) {
       );
     }
     
+    // Validate deadline format
+    const deadlineDate = new Date(deadline);
+    if (isNaN(deadlineDate.getTime())) {
+      return new Response(
+        JSON.stringify({ error: language === 'ar' ? 'تاريخ غير صالح' : 'Invalid deadline date' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } }
+      );
+    }
+    
     // Calculate days until deadline
     const today = new Date();
-    const deadlineDate = new Date(deadline);
+    today.setHours(0, 0, 0, 0);
     const daysUntilDeadline = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
     
     if (daysUntilDeadline < 1) {
@@ -31,10 +40,13 @@ export async function onRequestPost(context) {
       );
     }
     
+    // Cap at reasonable max (90 days)
+    const actualDays = Math.min(daysUntilDeadline, 90);
+    
     // Generate study plan using NanoGPT
     const studyPlan = await generateStudyPlanWithAI(
       studyMaterials,
-      daysUntilDeadline,
+      actualDays,
       dailyHours || 3,
       language,
       env.NANOGPT_API_KEY
@@ -44,8 +56,8 @@ export async function onRequestPost(context) {
     return new Response(
       JSON.stringify({
         success: true,
-        totalDays: daysUntilDeadline,
-        totalHours: daysUntilDeadline * (dailyHours || 3),
+        totalDays: actualDays,
+        totalHours: actualDays * (dailyHours || 3),
         deadline: deadline,
         language: language,
         ...studyPlan
@@ -95,6 +107,7 @@ async function generateStudyPlanWithAI(studyMaterials, daysUntilDeadline, dailyH
   // Calculate dates
   const totalMinutes = dailyHours * 60;
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const dates = [];
   
   for (let i = 0; i < daysUntilDeadline; i++) {
@@ -105,14 +118,14 @@ async function generateStudyPlanWithAI(studyMaterials, daysUntilDeadline, dailyH
   
   // Create appropriate prompt based on language
   const userMessage = isArabic 
-    ? createArabicPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates)
-    : createEnglishPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates);
+    ? createArabicPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates, totalMinutes)
+    : createEnglishPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates, totalMinutes);
   
   const systemMessage = isArabic
-    ? 'أنت مخطط تعليمي خبير. أنشئ خطط دراسية يومية مفصلة. يجب أن تكون الإجابة باللغة العربية فقط. استخدم JSON format.'
-    : 'You are an expert educational planner. Create detailed day-by-day study plans. Respond in English only. Use JSON format.';
+    ? 'أنت مخطط تعليمي خبير. أنشئ خطط دراسية يومية مفصلة. يجب أن تكون الإجابة باللغة العربية فقط.'
+    : 'You are an expert educational planner. Create detailed day-by-day study plans. Respond in English only.';
   
-  // Call NanoGPT API without JSON schema for better language support
+  // Call NanoGPT API
   const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -157,7 +170,18 @@ async function generateStudyPlanWithAI(studyMaterials, daysUntilDeadline, dailyH
   }
   
   try {
-    const studyPlan = JSON.parse(content);
+    let studyPlan = JSON.parse(content);
+    
+    // Fix dates if they are undefined or invalid
+    if (studyPlan.schedule && Array.isArray(studyPlan.schedule)) {
+      studyPlan.schedule = studyPlan.schedule.map((day, index) => {
+        if (!day.date || day.date === 'undefined' || day.date === 'null') {
+          day.date = dates[index] || dates[dates.length - 1];
+        }
+        return day;
+      });
+    }
+    
     return studyPlan;
   } catch (parseError) {
     console.error('JSON parse error:', parseError);
@@ -169,8 +193,8 @@ async function generateStudyPlanWithAI(studyMaterials, daysUntilDeadline, dailyH
 /**
  * Create English prompt
  */
-function createEnglishPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates) {
-  const totalMinutes = dailyHours * 60;
+function createEnglishPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates, totalMinutes) {
+  const datesList = dates.map((d, i) => `Day ${i + 1}: ${d}`).join('\n');
   
   return `Create a detailed study plan based on the following materials.
 
@@ -182,9 +206,12 @@ CONSTRAINTS:
 - Daily study time: ${dailyHours} hours (${totalMinutes} minutes)
 - Total hours: ${daysUntilDeadline * dailyHours}
 
-DATES: ${dates.join(', ')}
+DATES LIST (USE THESE EXACT DATES):
+${datesList}
 
-Return ONLY a JSON object in this exact format:
+IMPORTANT: Return a JSON object. For each day in the schedule, use the exact date from the list above.
+
+Example format:
 {
   "summary": "detailed summary in English",
   "schedule": [
@@ -197,14 +224,14 @@ Return ONLY a JSON object in this exact format:
   ]
 }
 
-All text must be in English.`;
+All text must be in English only.`;
 }
 
 /**
  * Create Arabic prompt
  */
-function createArabicPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates) {
-  const totalMinutes = dailyHours * 60;
+function createArabicPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates, totalMinutes) {
+  const datesList = dates.map((d, i) => `اليوم ${i + 1}: ${d}`).join('\n');
   
   return `أنشئ خطة دراسية مفصلة بناءً على المواد التالية.
 
@@ -216,9 +243,12 @@ ${studyMaterials}
 - وقت الدراسة اليومي: ${dailyHours} ساعات (${totalMinutes} دقيقة)
 - إجمالي الساعات: ${daysUntilDeadline * dailyHours}
 
-التواريخ: ${dates.join(', ')}
+قائمة التواريخ (استخدم هذه التواريخ بالضبط):
+${datesList}
 
-أعد JSON object فقط بهذا التنسيق:
+مهم: أعد كائن JSON. لكل يوم في الجدول، استخدم التاريخ من القائمة أعلاه.
+
+مثال على التنسيق:
 {
   "summary": "ملخص تفصيلي بالعربية",
   "schedule": [
