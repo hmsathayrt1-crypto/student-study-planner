@@ -638,21 +638,34 @@ function updateGenerateButton() {
 // Text extraction
 async function extractFileText(file) {
     const ext = file.name.split('.').pop().toLowerCase();
-    
+
+    // File size validation (max 10MB)
+    const MAX_SIZE = 10 * 1024 * 1024;
+    if (file.size > MAX_SIZE) {
+        const sizeMB = (file.size / (1024 * 1024)).toFixed(2);
+        const maxSizeMB = (MAX_SIZE / (1024 * 1024)).toFixed(0);
+        const errorMsg = state.currentLanguage === 'ar'
+            ? `الملف "${file.name}" (${sizeMB} MB) أكبر من الحد المسموح (${maxSizeMB} MB)`
+            : `File "${file.name}" (${sizeMB} MB) exceeds maximum size (${maxSizeMB} MB)`;
+        alert(errorMsg);
+        return;
+    }
+
     try {
         let text = '';
-        
+
         if (ext === 'txt' || ext === 'md') {
             text = await file.text();
         } else if (ext === 'pdf' || ext === 'docx') {
             text = `[${ext.toUpperCase()} file: ${file.name} - Content will be processed]`;
         }
-        
+
         state.extractedTexts.push({
             filename: file.name,
-            content: text
+            content: text,
+            size: file.size
         });
-        
+
         autoSave();
     } catch (error) {
         console.error(`Error extracting text from ${file.name}:`, error);
@@ -771,13 +784,13 @@ function renderTimeline(schedule) {
             
             <!-- Daily Actions -->
             <div class="day-actions">
-                <button class="btn-day-action ${hasFeedback ? 'active' : ''}" onclick="openFeedbackModal(${dayIndex})">
+                <button class="btn-day-action ${hasFeedback ? 'active' : ''}" data-action="feedback" data-day="${dayIndex}">
                     📝 ${t.dailyFeedback}
                 </button>
-                <button class="btn-day-action" onclick="openQuizModal(${dayIndex})">
+                <button class="btn-day-action" data-action="quiz" data-day="${dayIndex}">
                     ❓ ${t.dailyQuiz}
                 </button>
-                <button class="btn-day-action" onclick="generateMindMap(${dayIndex})">
+                <button class="btn-day-action" data-action="mindmap" data-day="${dayIndex}">
                     🧠 ${t.mindMap}
                 </button>
             </div>
@@ -793,6 +806,21 @@ function renderTimeline(schedule) {
     // Add click handlers for checkboxes
     elements.timeline.querySelectorAll('.task-item').forEach(item => {
         item.addEventListener('click', () => toggleTask(item.dataset.taskId));
+    });
+
+    // Event delegation for day action buttons
+    elements.timeline.querySelectorAll('.btn-day-action').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const day = Number.parseInt(btn.dataset.day || '0', 10);
+            const action = btn.dataset.action;
+            if (action === 'feedback') {
+                openFeedbackModal(day);
+            } else if (action === 'quiz') {
+                openQuizModal(day);
+            } else if (action === 'mindmap') {
+                generateMindMap(day);
+            }
+        });
     });
 }
 
@@ -934,7 +962,7 @@ function openFeedbackModal(dayIndex) {
                     </div>
                 </div>
 
-                <button class="btn-submit-feedback" onclick="submitFeedback(${dayIndex})">
+                <button class="btn-submit-feedback" data-day="${dayIndex}">
                     ${t.submitFeedback}
                 </button>
             </div>
@@ -1039,6 +1067,11 @@ function openFeedbackModal(dayIndex) {
                     : 'Could not access microphone.';
             }
         });
+    }
+
+    const submitBtn = modal.querySelector('.btn-submit-feedback');
+    if (submitBtn) {
+        submitBtn.addEventListener('click', () => submitFeedback(dayIndex));
     }
 }
 
@@ -1158,7 +1191,7 @@ Tasks: ${day.tasks.map(t => t.description).join(', ')}
                             </div>
                         `).join('')}
                     </div>
-                    <button class="btn-submit-quiz" onclick="submitQuiz(${dayIndex})">
+                    <button class="btn-submit-quiz" data-day="${dayIndex}">
                         ${t.checkAnswer}
                     </button>
                 </div>
@@ -1214,19 +1247,24 @@ function openFallbackQuizModal(day, dayIndex) {
                         </div>
                     `).join('')}
                 </div>
-                <button class="btn-submit-quiz" onclick="submitQuiz(${dayIndex})">
+                <button class="btn-submit-quiz" data-day="${dayIndex}">
                     ${t.checkAnswer}
                 </button>
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
     modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
     modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.remove();
     });
+
+    const submitQuizBtn = modal.querySelector('.btn-submit-quiz');
+    if (submitQuizBtn) {
+        submitQuizBtn.addEventListener('click', () => submitQuiz(dayIndex));
+    }
 }
 
 // Generate fallback quiz questions
@@ -1372,20 +1410,22 @@ Tasks: ${day.tasks.map(t => t.description).join('. ')}
                             </div>
                         `).join('')}
                     </div>
-                    <button class="btn-download-mindmap" onclick="downloadMindMap()">
+                    <button class="btn-download-mindmap">
                         ${state.currentLanguage === 'ar' ? 'تحميل الخريطة' : 'Download Mind Map'}
                     </button>
                 </div>
             </div>
         `;
-        
+
         document.body.appendChild(modal);
-        
+
         modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
         modal.addEventListener('click', (e) => {
             if (e.target === modal) modal.remove();
         });
-        
+
+        modal.querySelector('.btn-download-mindmap').addEventListener('click', downloadMindMap);
+
         // Award points
         addPoints(15);
         
@@ -1425,19 +1465,21 @@ function openFallbackMindMap(day, dayIndex) {
                         </div>
                     `).join('')}
                 </div>
-                <button class="btn-download-mindmap" onclick="downloadMindMap()">
+                <button class="btn-download-mindmap">
                     ${state.currentLanguage === 'ar' ? 'تحميل الخريطة' : 'Download Mind Map'}
                 </button>
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
+
     modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
     modal.addEventListener('click', (e) => {
         if (e.target === modal) modal.remove();
     });
+
+    modal.querySelector('.btn-download-mindmap').addEventListener('click', downloadMindMap);
     
     addPoints(15);
 }

@@ -27,12 +27,12 @@
 - [x] Escape AI-generated quiz text/options/explanations before rendering
 - [x] Escape AI-generated mindmap labels/descriptions before rendering
 - [x] Sanitize color input used in inline styles (`safeCssColor`)
-- [ ] Move from inline `onclick` to delegated event listeners (reduce XSS surface)
+- [x] Move from inline `onclick` to delegated event listeners (reduce XSS surface)
 
 ## Phase 4 — File Handling Quality
 - [ ] Implement real PDF text extraction (client or backend parser)
 - [ ] Implement real DOCX extraction (zip/xml parse or backend parser)
-- [ ] Add size limit and user warning for oversized files
+- [x] Add size limit and user warning for oversized files (10MB max)
 
 ## Phase 5 — Test & CI
 - [ ] Add automated integration tests for API tasks (`plan/quiz/mindmap/feedback`)
@@ -43,3 +43,28 @@
 ## Notes
 - ✅ Done items in this file are already implemented in current working tree.
 - ⚠️ Manual steps are required for key rotation/history purge and Cloudflare secret updates.
+
+---
+
+## Completed in Latest Round (2026-03-14)
+
+### ✅ Removed All Inline `onclick` Handlers (Phase 3)
+- Converted 8 inline handlers to delegated event listeners
+- Timeline buttons: Feedback, Quiz, MindMap (using `data-action` + `data-day`)
+- Modal submit buttons: Feedback, Quiz (both API + fallback)
+- Download mindmap buttons (both API + fallback)
+- Result: Lower XSS attack surface, better CSP compatibility
+
+### ✅ File Size Validation (Phase 4)
+- Added 10MB max file size check before processing
+- Shows localized error message (AR/EN) for oversized files
+- Stores file size in session for future reference
+- Gracefully handles size errors without crashing
+
+---
+
+## Remaining High-Priority Items
+1. **Manual Security Actions** (Phase 0): Rotate API key, purge Git history
+2. **File Extraction** (Phase 4): Real PDF/DOCX parsing (currently stubs)
+3. **Testing** (Phase 5): Integration tests + E2E flows
+
