@@ -841,6 +841,13 @@ input[type="number"]:focus {
     margin-bottom: 1.5rem;
 }
 
+.error-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
 /* Footer */
 footer {
     text-align: center;

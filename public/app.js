@@ -32,7 +32,8 @@ const translations = {
         confirmDelete: "Are you sure you want to delete this session?",
         untitledSession: "Untitled Session",
         progress: "Progress",
-        completed: "completed"
+        completed: "completed",
+        resetApp: "Reset App"
     },
     ar: {
         title: "مخطط الدراسة - بالذكاء الاصطناعي",
@@ -61,7 +62,8 @@ const translations = {
         confirmDelete: "هل أنت متأكد من حذف هذه الجلسة؟",
         untitledSession: "جلسة بدون اسم",
         progress: "التقدم",
-        completed: "مكتمل"
+        completed: "مكتمل",
+        resetApp: "إعادة تعيين"
     }
 };
 
@@ -352,6 +354,12 @@ function initEventListeners() {
     elements.retryBtn.addEventListener('click', resetUI);
     elements.newPlanBtn.addEventListener('click', resetUI);
     elements.downloadBtn.addEventListener('click', downloadPlan);
+    
+    // Reset app button
+    const resetAppBtn = document.getElementById('resetAppBtn');
+    if (resetAppBtn) {
+        resetAppBtn.addEventListener('click', resetApp);
+    }
     
     // Sidebar
     elements.menuToggle.addEventListener('click', toggleSidebar);
@@ -678,6 +686,16 @@ function downloadPlan() {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+}
+
+function resetApp() {
+    if (confirm(state.currentLanguage === 'ar' ? 
+        'هل أنت متأكد؟ سيتم حذف جميع الجلسات والبيانات.' : 
+        'Are you sure? All sessions and data will be deleted.')) {
+        localStorage.removeItem('studyPlanner_sessions');
+        localStorage.removeItem('studyPlanner_lang');
+        window.location.reload();
+    }
 }
 
 // Start
