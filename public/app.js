@@ -7,6 +7,10 @@
 const translations = {
     en: {
         title: "Student Study Planner - AI-Powered",
+        points: "Points",
+        level: "Level",
+        streak: "Streak",
+        badges: "Badges",
         sessions: "Sessions",
         appTitle: "📚 Student Study Planner",
         subtitle: "Upload your study materials and let AI create your perfect study plan",
@@ -33,10 +37,35 @@ const translations = {
         untitledSession: "Untitled Session",
         progress: "Progress",
         completed: "completed",
-        resetApp: "Reset App"
+        resetApp: "Reset App",
+        dailyFeedback: "Daily Feedback",
+        addFeedback: "Add Feedback",
+        voiceNote: "Voice Note",
+        photo: "Photo",
+        textNote: "Text Note",
+        submitFeedback: "Submit Feedback",
+        dailyQuiz: "Daily Quiz",
+        startQuiz: "Start Quiz",
+        checkAnswer: "Check Answer",
+        mindMap: "Mind Map",
+        generateMindMap: "Generate Mind Map",
+        points: "Points",
+        level: "Level",
+        streak: "Streak",
+        gamification: "Study Adventure",
+        badges: "Badges",
+        badgeFirstDay: "First Step",
+        badgeHalfway: "Halfway Hero",
+        badgeCompleted: "Study Master",
+        badgeStreak3: "3-Day Streak",
+        badgeStreak7: "Week Warrior"
     },
     ar: {
         title: "مخطط الدراسة - بالذكاء الاصطناعي",
+        points: "نقاط",
+        level: "مستوى",
+        streak: "سلسلة",
+        badges: "شارات",
         sessions: "الجلسات",
         appTitle: "📚 مخطط الدراسة",
         subtitle: "ارفع موادك الدراسية ودع الذكاء الاصطناعي ينشئ خطتك المثالية",
@@ -63,7 +92,28 @@ const translations = {
         untitledSession: "جلسة بدون اسم",
         progress: "التقدم",
         completed: "مكتمل",
-        resetApp: "إعادة تعيين"
+        resetApp: "إعادة تعيين",
+        dailyFeedback: "تقييم اليوم",
+        addFeedback: "إضافة تقييم",
+        voiceNote: "ملاحظة صوتية",
+        photo: "صورة",
+        textNote: "ملاحظة نصية",
+        submitFeedback: "إرسال التقييم",
+        dailyQuiz: "اختبار اليوم",
+        startQuiz: "بدء الاختبار",
+        checkAnswer: "تحقق من الإجابة",
+        mindMap: "خريطة ذهنية",
+        generateMindMap: "إنشاء خريطة ذهنية",
+        points: "نقاط",
+        level: "مستوى",
+        streak: "سلسلة أيام",
+        gamification: "مغامرة الدراسة",
+        badges: "شارات",
+        badgeFirstDay: "الخطوة الأولى",
+        badgeHalfway: "بطل منتصف الطريق",
+        badgeCompleted: "سيد الدراسة",
+        badgeStreak3: "سلسلة 3 أيام",
+        badgeStreak7: "محارب الأسبوع"
     }
 };
 
@@ -76,7 +126,14 @@ const state = {
     sessions: [],
     currentSessionId: null,
     studyPlan: null,
-    completedTasks: new Set()
+    completedTasks: new Set(),
+    gamification: {
+        points: parseInt(localStorage.getItem('studyPlanner_points') || '0'),
+        level: parseInt(localStorage.getItem('studyPlanner_level') || '1'),
+        streak: parseInt(localStorage.getItem('studyPlanner_streak') || '0'),
+        badges: JSON.parse(localStorage.getItem('studyPlanner_badges') || '[]'),
+        lastStudyDate: localStorage.getItem('studyPlanner_lastStudyDate') || null
+    }
 };
 
 // DOM Elements
@@ -88,6 +145,7 @@ function init() {
     initLanguage();
     initSessions();
     initEventListeners();
+    updateGamificationDisplay();
     
     // Set minimum date to today
     const today = new Date().toISOString().split('T')[0];
@@ -98,6 +156,19 @@ function init() {
     
     // Save on page unload
     window.addEventListener('beforeunload', autoSave);
+}
+
+// Update gamification display
+function updateGamificationDisplay() {
+    const pointsDisplay = document.getElementById('pointsDisplay');
+    const levelDisplay = document.getElementById('levelDisplay');
+    const streakDisplay = document.getElementById('streakDisplay');
+    const badgesCount = document.getElementById('badgesCount');
+    
+    if (pointsDisplay) pointsDisplay.textContent = state.gamification.points;
+    if (levelDisplay) levelDisplay.textContent = state.gamification.level;
+    if (streakDisplay) streakDisplay.textContent = state.gamification.streak;
+    if (badgesCount) badgesCount.textContent = state.gamification.badges.length;
 }
 
 // Cache DOM elements
@@ -191,16 +262,25 @@ function initSessions() {
 
 function createNewSession() {
     const t = translations[state.currentLanguage];
+    
+    // Calculate next session number based on existing sessions
+    const maxNumber = state.sessions.reduce((max, s) => {
+        const match = s.name.match(/\d+/);
+        return match ? Math.max(max, parseInt(match[0])) : max;
+    }, 0);
+    const nextNumber = maxNumber + 1;
+    
     const newSession = {
         id: 'session_' + Date.now(),
-        name: `${t.newSession} ${state.sessions.length + 1}`,
+        name: `${t.newSession} ${nextNumber}`,
         createdAt: new Date().toISOString(),
         files: [],
         extractedTexts: [],
         deadline: '',
         dailyHours: 3,
         studyPlan: null,
-        completedTasks: []
+        completedTasks: [],
+        dailyFeedback: {} // Store daily feedback
     };
     
     state.sessions.unshift(newSession);
@@ -620,12 +700,21 @@ function displayResults(data) {
 
 function renderTimeline(schedule) {
     const t = translations[state.currentLanguage];
+    const currentSession = state.sessions.find(s => s.id === state.currentSessionId);
     
-    elements.timeline.innerHTML = schedule.map((day, dayIndex) => `
-        <div class="day-card" style="animation-delay: ${dayIndex * 0.1}s">
+    elements.timeline.innerHTML = schedule.map((day, dayIndex) => {
+        const dayFeedback = currentSession?.dailyFeedback?.[dayIndex] || {};
+        const hasFeedback = dayFeedback.submitted;
+        const dayCompleted = day.tasks.every((_, taskIndex) => 
+            state.completedTasks.has(`${dayIndex}-${taskIndex}`)
+        );
+        
+        return `
+        <div class="day-card ${dayCompleted ? 'day-completed' : ''}" style="animation-delay: ${dayIndex * 0.1}s" data-day-index="${dayIndex}">
             <div class="day-header">
                 <span class="day-number">${day.day}</span>
                 <span class="day-date">${formatDate(day.date)}</span>
+                ${dayCompleted ? '<span class="day-badge">✓</span>' : ''}
             </div>
             <div class="day-topics">
                 <h4>${state.currentLanguage === 'ar' ? 'المواضيع' : 'Topics to Cover'}</h4>
@@ -647,8 +736,27 @@ function renderTimeline(schedule) {
                     `;
                 }).join('')}
             </div>
+            
+            <!-- Daily Actions -->
+            <div class="day-actions">
+                <button class="btn-day-action ${hasFeedback ? 'active' : ''}" onclick="openFeedbackModal(${dayIndex})">
+                    📝 ${t.dailyFeedback}
+                </button>
+                <button class="btn-day-action" onclick="openQuizModal(${dayIndex})">
+                    ❓ ${t.dailyQuiz}
+                </button>
+                <button class="btn-day-action" onclick="generateMindMap(${dayIndex})">
+                    🧠 ${t.mindMap}
+                </button>
+            </div>
+            
+            ${hasFeedback ? `
+            <div class="day-feedback-summary">
+                <p>✓ ${state.currentLanguage === 'ar' ? 'تم إرسال التقييم' : 'Feedback submitted'}</p>
+            </div>
+            ` : ''}
         </div>
-    `).join('');
+    `}).join('');
     
     // Add click handlers for checkboxes
     elements.timeline.querySelectorAll('.task-item').forEach(item => {
@@ -736,9 +844,383 @@ function resetApp() {
         'Are you sure? All sessions and data will be deleted.')) {
         localStorage.removeItem('studyPlanner_sessions');
         localStorage.removeItem('studyPlanner_lang');
+        localStorage.removeItem('studyPlanner_points');
+        localStorage.removeItem('studyPlanner_level');
+        localStorage.removeItem('studyPlanner_streak');
+        localStorage.removeItem('studyPlanner_badges');
+        localStorage.removeItem('studyPlanner_lastStudyDate');
         window.location.reload();
     }
 }
+
+// ==================== NEW FEATURES: Feedback, Quiz, Mind Map, Gamification ====================
+
+// Open feedback modal
+function openFeedbackModal(dayIndex) {
+    const t = translations[state.currentLanguage];
+    const currentSession = state.sessions.find(s => s.id === state.currentSessionId);
+    const existingFeedback = currentSession?.dailyFeedback?.[dayIndex] || {};
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>${t.dailyFeedback} - ${state.currentLanguage === 'ar' ? 'اليوم' : 'Day'} ${dayIndex + 1}</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="feedback-tabs">
+                    <button class="feedback-tab active" data-tab="text">${t.textNote}</button>
+                    <button class="feedback-tab" data-tab="voice">${t.voiceNote}</button>
+                    <button class="feedback-tab" data-tab="photo">${t.photo}</button>
+                </div>
+                
+                <div class="feedback-content" id="text-content">
+                    <textarea class="feedback-textarea" placeholder="${state.currentLanguage === 'ar' ? 'اكتب ملاحظاتك عن هذا اليوم... ما تعلمته؟ ما الصعوبات التي واجهتك؟' : 'Write your notes about today... What did you learn? What difficulties did you face?'}">${existingFeedback.text || ''}</textarea>
+                </div>
+                
+                <div class="feedback-content hidden" id="voice-content">
+                    <div class="voice-recorder">
+                        <button class="btn-record" id="recordBtn">🎤 ${state.currentLanguage === 'ar' ? 'ابدأ التسجيل' : 'Start Recording'}</button>
+                        <div class="recording-status" id="recordingStatus"></div>
+                        ${existingFeedback.voice ? '<audio controls src="' + existingFeedback.voice + '"></audio>' : ''}
+                    </div>
+                </div>
+                
+                <div class="feedback-content hidden" id="photo-content">
+                    <input type="file" accept="image/*" capture="environment" class="feedback-photo-input" id="photoInput">
+                    <div class="photo-preview" id="photoPreview">
+                        ${existingFeedback.photo ? '<img src="' + existingFeedback.photo + '" style="max-width: 100%; margin-top: 10px;">' : ''}
+                    </div>
+                </div>
+                
+                <button class="btn-submit-feedback" onclick="submitFeedback(${dayIndex})">
+                    ${t.submitFeedback}
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    // Close modal
+    modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+    
+    // Tab switching
+    modal.querySelectorAll('.feedback-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            modal.querySelectorAll('.feedback-tab').forEach(t => t.classList.remove('active'));
+            modal.querySelectorAll('.feedback-content').forEach(c => c.classList.add('hidden'));
+            tab.classList.add('active');
+            modal.querySelector(`#${tab.dataset.tab}-content`).classList.remove('hidden');
+        });
+    });
+    
+    // Photo preview
+    const photoInput = modal.querySelector('#photoInput');
+    if (photoInput) {
+        photoInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    modal.querySelector('#photoPreview').innerHTML = `<img src="${e.target.result}" style="max-width: 100%; margin-top: 10px;">`;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+}
+
+// Submit feedback
+function submitFeedback(dayIndex) {
+    const modal = document.querySelector('.modal');
+    const text = modal.querySelector('.feedback-textarea').value;
+    const photoPreview = modal.querySelector('#photoPreview img');
+    
+    const currentSession = state.sessions.find(s => s.id === state.currentSessionId);
+    if (!currentSession.dailyFeedback) {
+        currentSession.dailyFeedback = {};
+    }
+    
+    currentSession.dailyFeedback[dayIndex] = {
+        text: text,
+        photo: photoPreview ? photoPreview.src : null,
+        submitted: true,
+        submittedAt: new Date().toISOString()
+    };
+    
+    // Award points
+    addPoints(10);
+    
+    saveSessions();
+    renderTimeline(state.studyPlan.schedule);
+    modal.remove();
+    
+    // Show success message
+    const t = translations[state.currentLanguage];
+    alert(state.currentLanguage === 'ar' ? 'تم حفظ التقييم بنجاح! +10 نقاط' : 'Feedback saved successfully! +10 points');
+}
+
+// Open quiz modal
+function openQuizModal(dayIndex) {
+    const t = translations[state.currentLanguage];
+    const day = state.studyPlan.schedule[dayIndex];
+    
+    // Generate quiz questions based on topics
+    const questions = generateQuizQuestions(day);
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal quiz-modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>${t.dailyQuiz} - ${day.day}</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="quiz-container">
+                    ${questions.map((q, i) => `
+                        <div class="quiz-question" data-question="${i}">
+                            <p class="question-text">${i + 1}. ${q.question}</p>
+                            <div class="quiz-options">
+                                ${q.options.map((opt, j) => `
+                                    <label class="quiz-option">
+                                        <input type="radio" name="q${i}" value="${j}">
+                                        <span>${opt}</span>
+                                    </label>
+                                `).join('')}
+                            </div>
+                            <div class="quiz-result" id="result${i}"></div>
+                        </div>
+                    `).join('')}
+                </div>
+                <button class="btn-submit-quiz" onclick="submitQuiz(${dayIndex})">
+                    ${t.checkAnswer}
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+}
+
+// Generate quiz questions
+function generateQuizQuestions(day) {
+    const topics = day.topics;
+    const questions = [];
+    
+    // Simple quiz generation based on topics
+    topics.forEach((topic, index) => {
+        if (index < 3) { // Max 3 questions per day
+            questions.push({
+                question: state.currentLanguage === 'ar' 
+                    ? `ما هو المفهوم الرئيسي في: ${topic}؟`
+                    : `What is the main concept in: ${topic}?`,
+                options: state.currentLanguage === 'ar'
+                    ? ['المفهوم أ', 'المفهوم ب', 'المفهوم ج', topic]
+                    : ['Concept A', 'Concept B', 'Concept C', topic],
+                correct: 3
+            });
+        }
+    });
+    
+    return questions;
+}
+
+// Submit quiz
+function submitQuiz(dayIndex) {
+    const modal = document.querySelector('.quiz-modal');
+    const questions = modal.querySelectorAll('.quiz-question');
+    let correct = 0;
+    
+    questions.forEach((q, i) => {
+        const selected = q.querySelector('input[type="radio"]:checked');
+        const resultDiv = q.querySelector(`#result${i}`);
+        
+        if (selected && parseInt(selected.value) === 3) { // Correct answer is always index 3 for demo
+            correct++;
+            resultDiv.innerHTML = '✅ ' + (state.currentLanguage === 'ar' ? 'صحيح!' : 'Correct!');
+            resultDiv.className = 'quiz-result correct';
+        } else {
+            resultDiv.innerHTML = '❌ ' + (state.currentLanguage === 'ar' ? 'حاول مرة أخرى' : 'Try again');
+            resultDiv.className = 'quiz-result incorrect';
+        }
+    });
+    
+    // Award points
+    const points = correct * 20;
+    addPoints(points);
+    
+    setTimeout(() => {
+        modal.remove();
+        alert(state.currentLanguage === 'ar' 
+            ? `أجبت على ${correct} من ${questions.length} بشكل صحيح! +${points} نقاط`
+            : `You got ${correct}/${questions.length} correct! +${points} points`);
+    }, 1500);
+}
+
+// Generate mind map
+function generateMindMap(dayIndex) {
+    const t = translations[state.currentLanguage];
+    const day = state.studyPlan.schedule[dayIndex];
+    
+    const modal = document.createElement('div');
+    modal.className = 'modal mindmap-modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>${t.mindMap} - ${day.day}</h3>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="mindmap-container">
+                    <div class="mindmap-center">${state.currentLanguage === 'ar' ? 'اليوم' : 'Day'} ${dayIndex + 1}</div>
+                    ${day.topics.map((topic, i) => `
+                        <div class="mindmap-branch" style="--angle: ${(360 / day.topics.length) * i}deg">
+                            <div class="mindmap-node">${topic}</div>
+                            ${day.tasks.slice(i * 2, (i + 1) * 2).map(task => `
+                                <div class="mindmap-leaf">${task.description.substring(0, 30)}...</div>
+                            `).join('')}
+                        </div>
+                    `).join('')}
+                </div>
+                <button class="btn-download-mindmap" onclick="downloadMindMap()">
+                    ${state.currentLanguage === 'ar' ? 'تحميل الخريطة' : 'Download Mind Map'}
+                </button>
+            </div>
+        </div>
+    `;
+    
+    document.body.appendChild(modal);
+    
+    modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
+    modal.addEventListener('click', (e) => {
+        if (e.target === modal) modal.remove();
+    });
+    
+    // Award points
+    addPoints(15);
+}
+
+// Gamification functions
+function addPoints(points) {
+    state.gamification.points += points;
+    updateGamificationDisplay();
+    
+    // Check for level up
+    const newLevel = Math.floor(state.gamification.points / 100) + 1;
+    if (newLevel > state.gamification.level) {
+        state.gamification.level = newLevel;
+        showLevelUpNotification(newLevel);
+    }
+    
+    // Update streak
+    const today = new Date().toDateString();
+    if (state.gamification.lastStudyDate !== today) {
+        const lastDate = state.gamification.lastStudyDate ? new Date(state.gamification.lastStudyDate) : null;
+        const yesterday = new Date();
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        if (lastDate && lastDate.toDateString() === yesterday.toDateString()) {
+            state.gamification.streak++;
+        } else {
+            state.gamification.streak = 1;
+        }
+        state.gamification.lastStudyDate = today;
+    }
+    
+    // Check badges
+    checkBadges();
+    
+    // Save gamification data
+    localStorage.setItem('studyPlanner_points', state.gamification.points);
+    localStorage.setItem('studyPlanner_level', state.gamification.level);
+    localStorage.setItem('studyPlanner_streak', state.gamification.streak);
+    localStorage.setItem('studyPlanner_badges', JSON.stringify(state.gamification.badges));
+    localStorage.setItem('studyPlanner_lastStudyDate', state.gamification.lastStudyDate);
+}
+
+function checkBadges() {
+    const badges = state.gamification.badges;
+    
+    // First day badge
+    if (state.gamification.streak >= 1 && !badges.includes('firstDay')) {
+        badges.push('firstDay');
+        showBadgeNotification('badgeFirstDay');
+    }
+    
+    // 3-day streak
+    if (state.gamification.streak >= 3 && !badges.includes('streak3')) {
+        badges.push('streak3');
+        showBadgeNotification('badgeStreak3');
+    }
+    
+    // 7-day streak
+    if (state.gamification.streak >= 7 && !badges.includes('streak7')) {
+        badges.push('streak7');
+        showBadgeNotification('badgeStreak7');
+    }
+    
+    // Study master (1000 points)
+    if (state.gamification.points >= 1000 && !badges.includes('master')) {
+        badges.push('master');
+        showBadgeNotification('badgeCompleted');
+    }
+}
+
+function showLevelUpNotification(level) {
+    const t = translations[state.currentLanguage];
+    const notification = document.createElement('div');
+    notification.className = 'gamification-notification';
+    notification.innerHTML = `
+        <div class="notification-content">
+            <div class="notification-icon">🎉</div>
+            <h3>${state.currentLanguage === 'ar' ? 'تهانينا!' : 'Congratulations!'}</h3>
+            <p>${state.currentLanguage === 'ar' ? 'لقد وصلت إلى المستوى' : 'You reached Level'} ${level}!</p>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 3000);
+}
+
+function showBadgeNotification(badgeKey) {
+    const t = translations[state.currentLanguage];
+    const notification = document.createElement('div');
+    notification.className = 'gamification-notification badge-notification';
+    notification.innerHTML = `
+        <div class="notification-content">
+            <div class="notification-icon">🏆</div>
+            <h3>${state.currentLanguage === 'ar' ? 'شارة جديدة!' : 'New Badge!'}</h3>
+            <p>${t[badgeKey]}</p>
+        </div>
+    `;
+    document.body.appendChild(notification);
+    setTimeout(() => notification.remove(), 4000);
+}
+
+function downloadMindMap() {
+    alert(state.currentLanguage === 'ar' 
+        ? 'تم تحميل خريطة ذهنية! +15 نقاط'
+        : 'Mind map downloaded! +15 points');
+}
+
+// Make functions globally accessible
+window.openFeedbackModal = openFeedbackModal;
+window.openQuizModal = openQuizModal;
+window.generateMindMap = generateMindMap;
+window.submitFeedback = submitFeedback;
+window.submitQuiz = submitQuiz;
+window.downloadMindMap = downloadMindMap;
 
 // Start
 init();

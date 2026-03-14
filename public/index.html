@@ -35,6 +35,30 @@
             </header>
 
             <main>
+                <!-- Gamification Status Bar -->
+                <div class="gamification-bar" id="gamificationBar">
+                    <div class="gamification-item">
+                        <span class="gamification-icon">⭐</span>
+                        <span class="gamification-value" id="pointsDisplay">0</span>
+                        <span class="gamification-label" data-i18n="points">Points</span>
+                    </div>
+                    <div class="gamification-item">
+                        <span class="gamification-icon">🏆</span>
+                        <span class="gamification-value" id="levelDisplay">1</span>
+                        <span class="gamification-label" data-i18n="level">Level</span>
+                    </div>
+                    <div class="gamification-item">
+                        <span class="gamification-icon">🔥</span>
+                        <span class="gamification-value" id="streakDisplay">0</span>
+                        <span class="gamification-label" data-i18n="streak">Streak</span>
+                    </div>
+                    <div class="gamification-item badges-preview" id="badgesPreview">
+                        <span class="gamification-icon">🎖️</span>
+                        <span class="gamification-value" id="badgesCount">0</span>
+                        <span class="gamification-label" data-i18n="badges">Badges</span>
+                    </div>
+                </div>
+
                 <!-- Current Session Info -->
                 <div class="session-info" id="sessionInfo">
                     <span class="session-name" id="currentSessionName">Session 1</span>

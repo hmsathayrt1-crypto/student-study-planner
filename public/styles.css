@@ -926,3 +926,495 @@ footer {
 [hidden] {
     display: none !important;
 }
+
+/* Gamification Bar */
+.gamification-bar {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    flex-wrap: wrap;
+    background: var(--surface);
+    padding: 1rem;
+    border-radius: 16px;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border);
+}
+
+.gamification-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.5rem 1rem;
+    border-radius: 12px;
+    background: rgba(99, 102, 241, 0.1);
+    transition: transform 0.2s;
+}
+
+.gamification-item:hover {
+    transform: translateY(-2px);
+}
+
+.gamification-icon {
+    font-size: 1.5rem;
+}
+
+.gamification-value {
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--primary-light);
+}
+
+.gamification-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.badges-preview {
+    cursor: pointer;
+    background: rgba(245, 158, 11, 0.1);
+}
+
+.badges-preview .gamification-value {
+    color: #f59e0b;
+}
+
+/* ==================== NEW FEATURES CSS ==================== */
+
+/* Day completed badge */
+.day-completed {
+    border: 2px solid var(--success) !important;
+}
+
+.day-completed::before {
+    background: linear-gradient(to bottom, var(--success), var(--secondary)) !important;
+}
+
+.day-badge {
+    background: var(--success);
+    color: white;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+}
+
+/* Day Actions */
+.day-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 1rem;
+    flex-wrap: wrap;
+}
+
+.btn-day-action {
+    padding: 0.5rem 1rem;
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.btn-day-action:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.btn-day-action.active {
+    background: var(--success);
+    color: white;
+    border-color: var(--success);
+}
+
+.day-feedback-summary {
+    margin-top: 0.75rem;
+    padding: 0.5rem;
+    background: rgba(16, 185, 129, 0.1);
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: var(--success);
+}
+
+/* Modals */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.modal-content {
+    background: var(--surface);
+    border-radius: 20px;
+    width: 100%;
+    max-width: 600px;
+    max-height: 90vh;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.modal-header h3 {
+    font-size: 1.3rem;
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0.25rem;
+}
+
+.modal-close:hover {
+    color: var(--text);
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+/* Feedback Tabs */
+.feedback-tabs {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.feedback-tab {
+    padding: 0.5rem 1rem;
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.feedback-tab.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+}
+
+.feedback-tab:hover:not(.active) {
+    background: var(--border);
+}
+
+.feedback-textarea {
+    width: 100%;
+    min-height: 150px;
+    padding: 1rem;
+    background: var(--surface-light);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 1rem;
+    resize: vertical;
+}
+
+.feedback-textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+}
+
+.voice-recorder {
+    text-align: center;
+    padding: 2rem;
+}
+
+.btn-record {
+    padding: 1rem 2rem;
+    background: var(--error);
+    border: none;
+    border-radius: 50px;
+    color: white;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-record:hover {
+    transform: scale(1.05);
+    box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3);
+}
+
+.btn-record.recording {
+    background: var(--success);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+}
+
+.feedback-photo-input {
+    width: 100%;
+    padding: 1rem;
+    background: var(--surface-light);
+    border: 2px dashed var(--border);
+    border-radius: 12px;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.btn-submit-feedback {
+    width: 100%;
+    margin-top: 1rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, var(--gradient-1), var(--gradient-2));
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s;
+}
+
+.btn-submit-feedback:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+}
+
+/* Quiz Styles */
+.quiz-container {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.quiz-question {
+    background: var(--surface-light);
+    padding: 1.5rem;
+    border-radius: 12px;
+}
+
+.question-text {
+    font-weight: 600;
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+}
+
+.quiz-options {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.quiz-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: var(--surface);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.quiz-option:hover {
+    background: rgba(99, 102, 241, 0.1);
+}
+
+.quiz-option input[type="radio"] {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--primary);
+}
+
+.quiz-result {
+    margin-top: 0.75rem;
+    padding: 0.5rem;
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+.quiz-result.correct {
+    background: rgba(16, 185, 129, 0.2);
+    color: var(--success);
+}
+
+.quiz-result.incorrect {
+    background: rgba(239, 68, 68, 0.2);
+    color: var(--error);
+}
+
+.btn-submit-quiz {
+    width: 100%;
+    padding: 1rem;
+    background: var(--primary);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 1rem;
+}
+
+/* Mind Map Styles */
+.mindmap-container {
+    position: relative;
+    min-height: 400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+}
+
+.mindmap-center {
+    position: relative;
+    z-index: 10;
+    padding: 1.5rem 2rem;
+    background: linear-gradient(135deg, var(--gradient-1), var(--gradient-2));
+    border-radius: 50%;
+    color: white;
+    font-weight: 600;
+    font-size: 1.2rem;
+    box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3);
+}
+
+.mindmap-branch {
+    position: absolute;
+    transform-origin: center;
+    padding: 0.75rem 1.5rem;
+    background: var(--surface-light);
+    border-radius: 20px;
+    border: 1px solid var(--border);
+}
+
+.mindmap-node {
+    font-weight: 500;
+    color: var(--text);
+}
+
+.mindmap-leaf {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-top: 0.5rem;
+}
+
+.btn-download-mindmap {
+    width: 100%;
+    padding: 1rem;
+    background: var(--secondary);
+    border: none;
+    border-radius: 12px;
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 600;
+    cursor: pointer;
+    margin-top: 1rem;
+}
+
+/* Gamification Notifications */
+.gamification-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+    animation: slideIn 0.5s ease;
+}
+
+.notification-content {
+    background: linear-gradient(135deg, var(--gradient-1), var(--gradient-2));
+    color: white;
+    padding: 1.5rem 2rem;
+    border-radius: 16px;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+.notification-icon {
+    font-size: 3rem;
+    margin-bottom: 0.5rem;
+}
+
+.notification-content h3 {
+    font-size: 1.3rem;
+    margin-bottom: 0.25rem;
+}
+
+.badge-notification .notification-content {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(400px);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Responsive Modals */
+@media (max-width: 768px) {
+    .modal-content {
+        max-height: 95vh;
+    }
+    
+    .modal-header {
+        padding: 1rem;
+    }
+    
+    .modal-body {
+        padding: 1rem;
+    }
+    
+    .feedback-tabs {
+        flex-wrap: wrap;
+    }
+    
+    .feedback-tab {
+        flex: 1;
+        min-width: 80px;
+    }
+    
+    .day-actions {
+        justify-content: center;
+    }
+    
+    .btn-day-action {
+        font-size: 0.75rem;
+        padding: 0.4rem 0.75rem;
+    }
+    
+    .mindmap-container {
+        min-height: 300px;
+        padding: 1rem;
+    }
+    
+    .mindmap-center {
+        padding: 1rem 1.5rem;
+        font-size: 1rem;
+    }
+}
