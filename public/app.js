@@ -1,57 +1,374 @@
 /**
  * Student Study Planner - Frontend Application
- * Handles file uploads, text extraction, and UI interactions
+ * Features: Multi-language, Session Management, Local Storage, Interactive Checkboxes
  */
+
+// Translations
+const translations = {
+    en: {
+        title: "Student Study Planner - AI-Powered",
+        sessions: "Sessions",
+        appTitle: "📚 Student Study Planner",
+        subtitle: "Upload your study materials and let AI create your perfect study plan",
+        deleteSession: "Delete Session",
+        dropFiles: "Drop your files here",
+        orClick: "or click to browse",
+        supports: "Supports: PDF, DOCX, TXT, MD",
+        deadline: "Study Deadline",
+        dailyHours: "Daily Study Hours",
+        generatePlan: "Generate Study Plan",
+        generating: "Generating...",
+        creating: "Creating your study plan...",
+        analyzing: "AI is analyzing your materials",
+        yourPlan: "📋 Your Study Plan",
+        summary: "🎯 Summary",
+        schedule: "📅 Day-by-Day Schedule",
+        download: "Download Plan",
+        newPlan: "Create New Plan",
+        somethingWrong: "Something went wrong",
+        tryAgain: "Try Again",
+        poweredBy: "Powered by NanoGPT AI • Built for students",
+        newSession: "New Session",
+        confirmDelete: "Are you sure you want to delete this session?",
+        untitledSession: "Untitled Session",
+        progress: "Progress",
+        completed: "completed"
+    },
+    ar: {
+        title: "مخطط الدراسة - بالذكاء الاصطناعي",
+        sessions: "الجلسات",
+        appTitle: "📚 مخطط الدراسة",
+        subtitle: "ارفع موادك الدراسية ودع الذكاء الاصطناعي ينشئ خطتك المثالية",
+        deleteSession: "حذف الجلسة",
+        dropFiles: "أسقط ملفاتك هنا",
+        orClick: "أو انقر للتصفح",
+        supports: "الصيغ المدعومة: PDF, DOCX, TXT, MD",
+        deadline: "موعد الامتحان",
+        dailyHours: "ساعات الدراسة اليومية",
+        generatePlan: "إنشاء خطة الدراسة",
+        generating: "جاري الإنشاء...",
+        creating: "جاري إنشاء خطتك...",
+        analyzing: "الذكاء الاصطناعي يحلل موادك",
+        yourPlan: "📋 خطتك الدراسية",
+        summary: "🎯 ملخص",
+        schedule: "📅 الجدول اليومي",
+        download: "تحميل الخطة",
+        newPlan: "إنشاء خطة جديدة",
+        somethingWrong: "حدث خطأ ما",
+        tryAgain: "حاول مرة أخرى",
+        poweredBy: "مدعوم بواسطة NanoGPT AI • مخصص للطلاب",
+        newSession: "جلسة جديدة",
+        confirmDelete: "هل أنت متأكد من حذف هذه الجلسة؟",
+        untitledSession: "جلسة بدون اسم",
+        progress: "التقدم",
+        completed: "مكتمل"
+    }
+};
 
 // Global state
 const state = {
     files: [],
     extractedTexts: [],
-    isGenerating: false
+    isGenerating: false,
+    currentLanguage: localStorage.getItem('studyPlanner_lang') || 'en',
+    sessions: [],
+    currentSessionId: null,
+    studyPlan: null,
+    completedTasks: new Set()
 };
 
 // DOM Elements
-const elements = {
-    uploadArea: document.getElementById('uploadArea'),
-    fileInput: document.getElementById('fileInput'),
-    fileList: document.getElementById('fileList'),
-    deadlineInput: document.getElementById('deadlineInput'),
-    hoursInput: document.getElementById('hoursInput'),
-    generateBtn: document.getElementById('generateBtn'),
-    uploadSection: document.getElementById('uploadSection'),
-    loadingSection: document.getElementById('loadingSection'),
-    resultsSection: document.getElementById('resultsSection'),
-    errorSection: document.getElementById('errorSection'),
-    timeline: document.getElementById('timeline'),
-    summaryContent: document.getElementById('summaryContent'),
-    totalDays: document.getElementById('totalDays'),
-    totalHours: document.getElementById('totalHours'),
-    deadlineDisplay: document.getElementById('deadlineDisplay'),
-    errorMessage: document.getElementById('errorMessage'),
-    retryBtn: document.getElementById('retryBtn'),
-    newPlanBtn: document.getElementById('newPlanBtn'),
-    downloadBtn: document.getElementById('downloadBtn')
-};
+let elements = {};
 
 // Initialize
 function init() {
+    cacheElements();
+    initLanguage();
+    initSessions();
+    initEventListeners();
+    
     // Set minimum date to today
     const today = new Date().toISOString().split('T')[0];
     elements.deadlineInput.min = today;
     
-    // Event listeners
+    // Auto-save every 30 seconds
+    setInterval(autoSave, 30000);
+    
+    // Save on page unload
+    window.addEventListener('beforeunload', autoSave);
+}
+
+// Cache DOM elements
+function cacheElements() {
+    elements = {
+        uploadArea: document.getElementById('uploadArea'),
+        fileInput: document.getElementById('fileInput'),
+        fileList: document.getElementById('fileList'),
+        deadlineInput: document.getElementById('deadlineInput'),
+        hoursInput: document.getElementById('hoursInput'),
+        generateBtn: document.getElementById('generateBtn'),
+        uploadSection: document.getElementById('uploadSection'),
+        loadingSection: document.getElementById('loadingSection'),
+        resultsSection: document.getElementById('resultsSection'),
+        errorSection: document.getElementById('errorSection'),
+        timeline: document.getElementById('timeline'),
+        summaryContent: document.getElementById('summaryContent'),
+        totalDays: document.getElementById('totalDays'),
+        totalHours: document.getElementById('totalHours'),
+        deadlineDisplay: document.getElementById('deadlineDisplay'),
+        progressDisplay: document.getElementById('progressDisplay'),
+        errorMessage: document.getElementById('errorMessage'),
+        retryBtn: document.getElementById('retryBtn'),
+        newPlanBtn: document.getElementById('newPlanBtn'),
+        downloadBtn: document.getElementById('downloadBtn'),
+        sidebar: document.getElementById('sidebar'),
+        sessionsList: document.getElementById('sessionsList'),
+        menuToggle: document.getElementById('menuToggle'),
+        newSessionBtn: document.getElementById('newSessionBtn'),
+        currentSessionName: document.getElementById('currentSessionName'),
+        deleteSessionBtn: document.getElementById('deleteSessionBtn'),
+        sessionInfo: document.getElementById('sessionInfo')
+    };
+}
+
+// Language management
+function initLanguage() {
+    document.documentElement.lang = state.currentLanguage;
+    document.documentElement.dir = state.currentLanguage === 'ar' ? 'rtl' : 'ltr';
+    updateLanguageUI();
+}
+
+function updateLanguageUI() {
+    const t = translations[state.currentLanguage];
+    
+    // Update all elements with data-i18n attribute
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (t[key]) {
+            el.textContent = t[key];
+        }
+    });
+    
+    // Update lang buttons
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.lang === state.currentLanguage);
+    });
+}
+
+function setLanguage(lang) {
+    state.currentLanguage = lang;
+    localStorage.setItem('studyPlanner_lang', lang);
+    document.documentElement.lang = lang;
+    document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
+    updateLanguageUI();
+}
+
+// Session management
+function initSessions() {
+    const saved = localStorage.getItem('studyPlanner_sessions');
+    if (saved) {
+        try {
+            const parsed = JSON.parse(saved);
+            state.sessions = parsed.sessions || [];
+            state.currentSessionId = parsed.currentSessionId;
+            
+            // Load current session data
+            if (state.currentSessionId) {
+                loadSession(state.currentSessionId);
+            }
+        } catch (e) {
+            console.error('Failed to load sessions:', e);
+            createNewSession();
+        }
+    } else {
+        createNewSession();
+    }
+    
+    renderSessionsList();
+}
+
+function createNewSession() {
+    const t = translations[state.currentLanguage];
+    const newSession = {
+        id: 'session_' + Date.now(),
+        name: `${t.newSession} ${state.sessions.length + 1}`,
+        createdAt: new Date().toISOString(),
+        files: [],
+        extractedTexts: [],
+        deadline: '',
+        dailyHours: 3,
+        studyPlan: null,
+        completedTasks: []
+    };
+    
+    state.sessions.unshift(newSession);
+    state.currentSessionId = newSession.id;
+    
+    // Reset UI
+    resetUI();
+    renderSessionsList();
+    saveSessions();
+    
+    return newSession;
+}
+
+function loadSession(sessionId) {
+    const session = state.sessions.find(s => s.id === sessionId);
+    if (!session) return;
+    
+    state.currentSessionId = sessionId;
+    state.files = session.files || [];
+    state.extractedTexts = session.extractedTexts || [];
+    state.studyPlan = session.studyPlan || null;
+    state.completedTasks = new Set(session.completedTasks || []);
+    
+    // Restore UI state
+    elements.deadlineInput.value = session.deadline || '';
+    elements.hoursInput.value = session.dailyHours || 3;
+    elements.currentSessionName.textContent = session.name;
+    
+    renderFileList();
+    
+    if (state.studyPlan) {
+        displayResults(state.studyPlan);
+    }
+    
+    renderSessionsList();
+}
+
+function saveSessions() {
+    const session = state.sessions.find(s => s.id === state.currentSessionId);
+    if (session) {
+        session.files = state.files;
+        session.extractedTexts = state.extractedTexts;
+        session.deadline = elements.deadlineInput.value;
+        session.dailyHours = elements.hoursInput.value;
+        session.studyPlan = state.studyPlan;
+        session.completedTasks = Array.from(state.completedTasks);
+        session.name = elements.currentSessionName.textContent;
+    }
+    
+    localStorage.setItem('studyPlanner_sessions', JSON.stringify({
+        sessions: state.sessions,
+        currentSessionId: state.currentSessionId
+    }));
+}
+
+function autoSave() {
+    if (state.currentSessionId) {
+        saveSessions();
+    }
+}
+
+function deleteSession(sessionId) {
+    const t = translations[state.currentLanguage];
+    if (!confirm(t.confirmDelete)) return;
+    
+    state.sessions = state.sessions.filter(s => s.id !== sessionId);
+    
+    if (state.currentSessionId === sessionId) {
+        if (state.sessions.length > 0) {
+            loadSession(state.sessions[0].id);
+        } else {
+            createNewSession();
+        }
+    }
+    
+    renderSessionsList();
+    saveSessions();
+}
+
+function renderSessionsList() {
+    const t = translations[state.currentLanguage];
+    
+    elements.sessionsList.innerHTML = state.sessions.map(session => {
+        const date = new Date(session.createdAt).toLocaleDateString(
+            state.currentLanguage === 'ar' ? 'ar-SA' : 'en-US'
+        );
+        const isActive = session.id === state.currentSessionId;
+        
+        return `
+            <div class="session-item ${isActive ? 'active' : ''}" data-session-id="${session.id}">
+                <div class="session-info-text">
+                    <div class="session-title">${escapeHtml(session.name)}</div>
+                    <div class="session-date">${date}</div>
+                </div>
+                <button class="session-delete" data-session-id="${session.id}" title="${t.deleteSession}">🗑</button>
+            </div>
+        `;
+    }).join('');
+    
+    // Add click handlers
+    elements.sessionsList.querySelectorAll('.session-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('session-delete')) {
+                loadSession(item.dataset.sessionId);
+            }
+        });
+    });
+    
+    elements.sessionsList.querySelectorAll('.session-delete').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteSession(btn.dataset.sessionId);
+        });
+    });
+}
+
+function resetUI() {
+    state.files = [];
+    state.extractedTexts = [];
+    state.studyPlan = null;
+    state.completedTasks = new Set();
+    state.isGenerating = false;
+    
+    elements.fileList.innerHTML = '';
+    elements.deadlineInput.value = '';
+    elements.hoursInput.value = '3';
+    elements.currentSessionName.textContent = translations[state.currentLanguage].newSession + ' ' + state.sessions.length;
+    
+    elements.uploadSection.hidden = false;
+    elements.loadingSection.hidden = true;
+    elements.resultsSection.hidden = true;
+    elements.errorSection.hidden = true;
+    
+    updateGenerateButton();
+}
+
+// Event Listeners
+function initEventListeners() {
+    // File upload
     elements.uploadArea.addEventListener('click', () => elements.fileInput.click());
     elements.fileInput.addEventListener('change', handleFileSelect);
     elements.uploadArea.addEventListener('dragover', handleDragOver);
     elements.uploadArea.addEventListener('dragleave', handleDragLeave);
     elements.uploadArea.addEventListener('drop', handleDrop);
+    
+    // Generate
     elements.generateBtn.addEventListener('click', generateStudyPlan);
-    elements.retryBtn.addEventListener('click', resetApp);
-    elements.newPlanBtn.addEventListener('click', resetApp);
+    elements.deadlineInput.addEventListener('change', updateGenerateButton);
+    
+    // Navigation
+    elements.retryBtn.addEventListener('click', resetUI);
+    elements.newPlanBtn.addEventListener('click', resetUI);
     elements.downloadBtn.addEventListener('click', downloadPlan);
+    
+    // Sidebar
+    elements.menuToggle.addEventListener('click', toggleSidebar);
+    elements.newSessionBtn.addEventListener('click', createNewSession);
+    elements.deleteSessionBtn.addEventListener('click', () => deleteSession(state.currentSessionId));
+    
+    // Language
+    document.querySelectorAll('.lang-btn').forEach(btn => {
+        btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
+    });
 }
 
-// Drag and drop handlers
+function toggleSidebar() {
+    elements.sidebar.classList.toggle('open');
+}
+
+// Drag and drop
 function handleDragOver(e) {
     e.preventDefault();
     elements.uploadArea.classList.add('dragover');
@@ -69,39 +386,41 @@ function handleDrop(e) {
     addFiles(files);
 }
 
-// File selection handler
 function handleFileSelect(e) {
     const files = Array.from(e.target.files);
     addFiles(files);
 }
 
-// Add files to state
+// File management
 function addFiles(files) {
-    const validTypes = [
-        'application/pdf',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        'text/plain',
-        'text/markdown'
-    ];
-    const validExtensions = ['.pdf', '.docx', '.txt', '.md'];
+    const validTypes = ['.pdf', '.docx', '.txt', '.md'];
     
     files.forEach(file => {
-        const hasValidExtension = validExtensions.some(ext => 
+        const hasValidExtension = validTypes.some(ext => 
             file.name.toLowerCase().endsWith(ext)
         );
         
-        if (hasValidExtension || validTypes.includes(file.type)) {
+        if (hasValidExtension) {
             if (!state.files.find(f => f.name === file.name && f.size === file.size)) {
-                state.files.push(file);
+                // Store file info (not the actual File object for localStorage)
+                state.files.push({
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    lastModified: file.lastModified
+                });
+                
+                // Extract text
+                extractFileText(file);
             }
         }
     });
     
     renderFileList();
     updateGenerateButton();
+    autoSave();
 }
 
-// Render file list
 function renderFileList() {
     elements.fileList.innerHTML = state.files.map((file, index) => `
         <div class="file-item">
@@ -112,31 +431,29 @@ function renderFileList() {
                     <div class="file-size">${formatFileSize(file.size)}</div>
                 </div>
             </div>
-            <button class="file-remove" onclick="removeFile(${index})" title="Remove file">✕</button>
+            <button class="file-remove" data-index="${index}" title="Remove">✕</button>
         </div>
     `).join('');
+    
+    elements.fileList.querySelectorAll('.file-remove').forEach(btn => {
+        btn.addEventListener('click', () => removeFile(parseInt(btn.dataset.index)));
+    });
 }
 
-// Remove file
 function removeFile(index) {
     state.files.splice(index, 1);
+    state.extractedTexts.splice(index, 1);
     renderFileList();
     updateGenerateButton();
+    autoSave();
 }
 
-// Get file icon
 function getFileIcon(filename) {
     const ext = filename.split('.').pop().toLowerCase();
-    const icons = {
-        pdf: '📕',
-        docx: '📘',
-        txt: '📄',
-        md: '📝'
-    };
+    const icons = { pdf: '📕', docx: '📘', txt: '📄', md: '📝' };
     return icons[ext] || '📄';
 }
 
-// Format file size
 function formatFileSize(bytes) {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -145,131 +462,44 @@ function formatFileSize(bytes) {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-// Escape HTML
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
 }
 
-// Update generate button state
 function updateGenerateButton() {
     const hasFiles = state.files.length > 0;
     const hasDeadline = elements.deadlineInput.value !== '';
     elements.generateBtn.disabled = !(hasFiles && hasDeadline);
 }
 
-// Watch for deadline changes
-elements.deadlineInput.addEventListener('change', updateGenerateButton);
-
-// Extract text from files
-async function extractTextFromFiles() {
-    const texts = [];
+// Text extraction
+async function extractFileText(file) {
+    const ext = file.name.split('.').pop().toLowerCase();
     
-    for (const file of state.files) {
-        const ext = file.name.split('.').pop().toLowerCase();
-        
-        try {
-            if (ext === 'txt' || ext === 'md') {
-                const text = await file.text();
-                texts.push({
-                    filename: file.name,
-                    content: text
-                });
-            } else if (ext === 'pdf') {
-                const text = await extractPdfText(file);
-                texts.push({
-                    filename: file.name,
-                    content: text
-                });
-            } else if (ext === 'docx') {
-                const text = await extractDocxText(file);
-                texts.push({
-                    filename: file.name,
-                    content: text
-                });
-            }
-        } catch (error) {
-            console.error(`Error extracting text from ${file.name}:`, error);
-            texts.push({
-                filename: file.name,
-                content: `[Error extracting content from ${file.name}]`
-            });
-        }
-    }
-    
-    return texts;
-}
-
-// Extract PDF text using pdf-parse (client-side simple extraction)
-async function extractPdfText(file) {
-    // For now, read as text and extract printable characters
-    // In production, use PDF.js library
-    const arrayBuffer = await file.arrayBuffer();
-    const uint8Array = new Uint8Array(arrayBuffer);
-    
-    // Try to extract text from PDF
-    let text = '';
-    let inText = false;
-    let textBuffer = '';
-    
-    for (let i = 0; i < uint8Array.length; i++) {
-        const byte = uint8Array[i];
-        const char = String.fromCharCode(byte);
-        
-        // Simple PDF text extraction
-        if (byte === 40) { // '(' - start of text string
-            inText = true;
-            textBuffer = '';
-        } else if (byte === 41 && inText) { // ')' - end of text string
-            inText = false;
-            text += textBuffer + ' ';
-        } else if (inText) {
-            // Handle escaped characters
-            if (byte === 92) { // backslash
-                i++;
-                if (i < uint8Array.length) {
-                    const nextByte = uint8Array[i];
-                    if (nextByte === 110) textBuffer += '\n'; // \n
-                    else if (nextByte === 114) textBuffer += '\r'; // \r
-                    else if (nextByte === 116) textBuffer += '\t'; // \t
-                    else if (nextByte === 98) textBuffer += '\b'; // \b
-                    else if (nextByte === 102) textBuffer += '\f'; // \f
-                    else textBuffer += String.fromCharCode(nextByte);
-                }
-            } else {
-                textBuffer += char;
-            }
-        }
-    }
-    
-    // If we couldn't extract text, provide a fallback message
-    if (!text.trim()) {
-        text = `[PDF file: ${file.name} - Content will be processed on server]`;
-    }
-    
-    return text;
-}
-
-// Extract DOCX text
-async function extractDocxText(file) {
-    // Simple DOCX extraction - read XML content
     try {
-        const arrayBuffer = await file.arrayBuffer();
-        const text = new TextDecoder('utf-8').decode(arrayBuffer);
+        let text = '';
         
-        // Extract text between XML tags
-        const textMatches = text.match(/<w:t[^>]*>([^<]*)<\/w:t>/g);
-        if (textMatches) {
-            return textMatches
-                .map(match => match.replace(/<w:t[^>]*>|<\/w:t>/g, ''))
-                .join(' ');
+        if (ext === 'txt' || ext === 'md') {
+            text = await file.text();
+        } else if (ext === 'pdf' || ext === 'docx') {
+            text = `[${ext.toUpperCase()} file: ${file.name} - Content will be processed]`;
         }
+        
+        state.extractedTexts.push({
+            filename: file.name,
+            content: text
+        });
+        
+        autoSave();
     } catch (error) {
-        console.error('DOCX extraction error:', error);
+        console.error(`Error extracting text from ${file.name}:`, error);
+        state.extractedTexts.push({
+            filename: file.name,
+            content: `[Error extracting content from ${file.name}]`
+        });
     }
-    
-    return `[DOCX file: ${file.name} - Content will be processed on server]`;
 }
 
 // Generate study plan
@@ -282,163 +512,160 @@ async function generateStudyPlan() {
     elements.errorSection.hidden = true;
     
     try {
-        console.log('Starting study plan generation...');
-        
-        // Extract text from all files
-        console.log('Extracting text from files...');
-        const extractedTexts = await extractTextFromFiles();
-        state.extractedTexts = extractedTexts;
-        console.log('Extracted text from', extractedTexts.length, 'files');
-        
-        // Combine all text
-        let combinedText = extractedTexts
+        const combinedText = state.extractedTexts
             .map(t => `=== ${t.filename} ===\n${t.content}`)
             .join('\n\n');
         
-        // Limit text size to avoid API limits (max 100KB)
-        const MAX_LENGTH = 100000;
-        if (combinedText.length > MAX_LENGTH) {
-            console.log('Text too long, truncating...');
-            combinedText = combinedText.substring(0, MAX_LENGTH) + '\n\n[Content truncated due to length]';
-        }
-        
-        console.log('Combined text length:', combinedText.length);
-        
-        // Prepare request data
         const requestData = {
-            studyMaterials: combinedText,
+            studyMaterials: combinedText.substring(0, 100000),
             deadline: elements.deadlineInput.value,
             dailyHours: parseInt(elements.hoursInput.value) || 3
         };
         
-        console.log('Sending API request...');
-        
-        // Call API
         const response = await fetch('/api/generate-plan', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(requestData)
         });
         
-        console.log('API response status:', response.status);
-        
         if (!response.ok) {
-            const errorText = await response.text();
-            console.error('API error response:', errorText);
-            throw new Error(`API error: ${response.status} ${response.statusText}`);
+            throw new Error(`API error: ${response.status}`);
         }
         
         const data = await response.json();
-        console.log('API response data:', data);
         
         if (data.error) {
             throw new Error(data.error);
         }
         
+        state.studyPlan = data;
         displayResults(data);
+        autoSave();
         
     } catch (error) {
-        console.error('Error generating plan:', error);
+        console.error('Error:', error);
         state.isGenerating = false;
         elements.loadingSection.hidden = true;
-        showError(error.message || 'Failed to generate study plan. Please try again.');
+        showError(error.message);
     }
 }
 
 // Display results
 function displayResults(data) {
+    const t = translations[state.currentLanguage];
+    
     elements.loadingSection.hidden = true;
     elements.resultsSection.hidden = false;
     
-    // Update meta info
-    elements.totalDays.textContent = `📅 ${data.totalDays} days`;
-    elements.totalHours.textContent = `⏰ ${data.totalHours} hours total`;
-    elements.deadlineDisplay.textContent = `🎯 Due: ${formatDate(data.deadline)}`;
+    elements.totalDays.textContent = `📅 ${data.totalDays} ${state.currentLanguage === 'ar' ? 'أيام' : 'days'}`;
+    elements.totalHours.textContent = `⏰ ${data.totalHours} ${state.currentLanguage === 'ar' ? 'ساعة' : 'hours total'}`;
+    elements.deadlineDisplay.textContent = `🎯 ${t.deadline}: ${formatDate(data.deadline)}`;
     
-    // Display summary
     elements.summaryContent.innerHTML = formatSummary(data.summary);
     
-    // Display timeline
-    elements.timeline.innerHTML = data.schedule.map((day, index) => `
-        <div class="day-card" style="animation-delay: ${index * 0.1}s">
+    renderTimeline(data.schedule);
+    updateProgress();
+}
+
+function renderTimeline(schedule) {
+    const t = translations[state.currentLanguage];
+    
+    elements.timeline.innerHTML = schedule.map((day, dayIndex) => `
+        <div class="day-card" style="animation-delay: ${dayIndex * 0.1}s">
             <div class="day-header">
                 <span class="day-number">${day.day}</span>
                 <span class="day-date">${formatDate(day.date)}</span>
             </div>
             <div class="day-topics">
-                <h4>Topics to Cover</h4>
+                <h4>${state.currentLanguage === 'ar' ? 'المواضيع' : 'Topics to Cover'}</h4>
                 <ul>
                     ${day.topics.map(topic => `<li>${escapeHtml(topic)}</li>`).join('')}
                 </ul>
             </div>
             <div class="day-tasks">
-                <h4>Tasks</h4>
-                ${day.tasks.map(task => `
-                    <div class="task-item">
-                        <div class="task-checkbox"></div>
-                        <div class="task-text">${escapeHtml(task.description)}</div>
-                        <div class="task-time">${task.duration} min</div>
-                    </div>
-                `).join('')}
+                <h4>${state.currentLanguage === 'ar' ? 'المهام' : 'Tasks'}</h4>
+                ${day.tasks.map((task, taskIndex) => {
+                    const taskId = `${dayIndex}-${taskIndex}`;
+                    const isCompleted = state.completedTasks.has(taskId);
+                    return `
+                        <div class="task-item ${isCompleted ? 'completed' : ''}" data-task-id="${taskId}">
+                            <div class="task-checkbox ${isCompleted ? 'checked' : ''}"></div>
+                            <div class="task-text">${escapeHtml(task.description)}</div>
+                            <div class="task-time">${task.duration} ${state.currentLanguage === 'ar' ? 'د' : 'min'}</div>
+                        </div>
+                    `;
+                }).join('')}
             </div>
         </div>
     `).join('');
+    
+    // Add click handlers for checkboxes
+    elements.timeline.querySelectorAll('.task-item').forEach(item => {
+        item.addEventListener('click', () => toggleTask(item.dataset.taskId));
+    });
 }
 
-// Format summary text
+function toggleTask(taskId) {
+    if (state.completedTasks.has(taskId)) {
+        state.completedTasks.delete(taskId);
+    } else {
+        state.completedTasks.add(taskId);
+    }
+    
+    const taskElement = document.querySelector(`[data-task-id="${taskId}"]`);
+    if (taskElement) {
+        taskElement.classList.toggle('completed');
+        taskElement.querySelector('.task-checkbox').classList.toggle('checked');
+    }
+    
+    updateProgress();
+    autoSave();
+}
+
+function updateProgress() {
+    const t = translations[state.currentLanguage];
+    
+    if (!state.studyPlan || !state.studyPlan.schedule) return;
+    
+    let totalTasks = 0;
+    state.studyPlan.schedule.forEach(day => {
+        totalTasks += day.tasks.length;
+    });
+    
+    const completedCount = state.completedTasks.size;
+    const percentage = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
+    
+    elements.progressDisplay.textContent = `📊 ${t.progress}: ${percentage}% ${t.completed}`;
+}
+
 function formatSummary(summary) {
-    // Convert markdown-like content to HTML
-    return summary
-        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    return escapeHtml(summary)
         .replace(/\n\n/g, '</p><p>')
-        .replace(/\n- (.*)/g, '<li>$1</li>')
-        .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
         .replace(/^(.+)$/gm, '<p>$1</p>');
 }
 
-// Format date
 function formatDate(dateString) {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
+    return date.toLocaleDateString(state.currentLanguage === 'ar' ? 'ar-SA' : 'en-US', {
         weekday: 'short',
         month: 'short',
         day: 'numeric'
     });
 }
 
-// Show error
 function showError(message) {
-    elements.loadingSection.hidden = true;
     elements.errorSection.hidden = false;
     elements.errorMessage.textContent = message;
 }
 
-// Reset app
-function resetApp() {
-    state.files = [];
-    state.extractedTexts = [];
-    state.isGenerating = false;
-    
-    elements.fileList.innerHTML = '';
-    elements.deadlineInput.value = '';
-    elements.hoursInput.value = '3';
-    
-    elements.uploadSection.hidden = false;
-    elements.loadingSection.hidden = true;
-    elements.resultsSection.hidden = true;
-    elements.errorSection.hidden = true;
-    
-    updateGenerateButton();
-}
-
-// Download plan
 function downloadPlan() {
+    if (!state.studyPlan) return;
+    
     const planData = {
         title: 'Study Plan',
         created: new Date().toISOString(),
-        schedule: state.lastPlan
+        completedTasks: Array.from(state.completedTasks),
+        ...state.studyPlan
     };
     
     const blob = new Blob([JSON.stringify(planData, null, 2)], { type: 'application/json' });

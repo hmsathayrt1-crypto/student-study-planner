@@ -1,103 +1,131 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Student Study Planner - AI-Powered</title>
+    <title data-i18n="title">Student Study Planner - AI-Powered</title>
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>📚 Student Study Planner</h1>
-            <p class="subtitle">Upload your study materials and let AI create your perfect study plan</p>
+    <!-- Sidebar for Sessions -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <h3 data-i18n="sessions">Sessions</h3>
+            <button class="btn-icon" id="newSessionBtn" title="New Session">+</button>
+        </div>
+        <div class="sessions-list" id="sessionsList"></div>
+    </aside>
+
+    <!-- Main Content -->
+    <div class="main-wrapper">
+        <!-- Top Bar -->
+        <header class="top-bar">
+            <button class="menu-toggle" id="menuToggle">☰</button>
+            <div class="lang-switcher">
+                <button class="lang-btn active" data-lang="en">EN</button>
+                <button class="lang-btn" data-lang="ar">عربي</button>
+            </div>
         </header>
 
-        <main>
-            <!-- Upload Section -->
-            <section class="upload-section" id="uploadSection">
-                <div class="upload-card">
-                    <div class="upload-area" id="uploadArea">
-                        <div class="upload-icon">📄</div>
-                        <h3>Drop your files here</h3>
-                        <p class="upload-text">or click to browse</p>
-                        <p class="file-types">Supports: PDF, DOCX, TXT, MD</p>
-                        <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" multiple hidden>
+        <div class="container">
+            <header class="main-header">
+                <h1 data-i18n="appTitle">📚 Student Study Planner</h1>
+                <p class="subtitle" data-i18n="subtitle">Upload your study materials and let AI create your perfect study plan</p>
+            </header>
+
+            <main>
+                <!-- Current Session Info -->
+                <div class="session-info" id="sessionInfo">
+                    <span class="session-name" id="currentSessionName">Session 1</span>
+                    <button class="btn-delete-session" id="deleteSessionBtn" data-i18n="deleteSession">Delete Session</button>
+                </div>
+
+                <!-- Upload Section -->
+                <section class="upload-section" id="uploadSection">
+                    <div class="upload-card">
+                        <div class="upload-area" id="uploadArea">
+                            <div class="upload-icon">📄</div>
+                            <h3 data-i18n="dropFiles">Drop your files here</h3>
+                            <p class="upload-text" data-i18n="orClick">or click to browse</p>
+                            <p class="file-types" data-i18n="supports">Supports: PDF, DOCX, TXT, MD</p>
+                            <input type="file" id="fileInput" accept=".pdf,.docx,.txt,.md" multiple hidden>
+                        </div>
+                        
+                        <div class="file-list" id="fileList"></div>
+                        
+                        <div class="deadline-section">
+                            <label for="deadlineInput">📅 <span data-i18n="deadline">Study Deadline</span></label>
+                            <input type="date" id="deadlineInput" required>
+                        </div>
+                        
+                        <div class="hours-section">
+                            <label for="hoursInput">⏰ <span data-i18n="dailyHours">Daily Study Hours</span></label>
+                            <input type="number" id="hoursInput" min="1" max="12" value="3" required>
+                        </div>
+                        
+                        <button class="generate-btn" id="generateBtn" disabled>
+                            <span class="btn-text" data-i18n="generatePlan">Generate Study Plan</span>
+                            <span class="btn-loading" hidden data-i18n="generating">Generating...</span>
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Loading Section -->
+                <section class="loading-section" id="loadingSection" hidden>
+                    <div class="loading-card">
+                        <div class="spinner"></div>
+                        <h3 data-i18n="creating">Creating your study plan...</h3>
+                        <p data-i18n="analyzing">AI is analyzing your materials</p>
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Results Section -->
+                <section class="results-section" id="resultsSection" hidden>
+                    <div class="results-header">
+                        <h2 data-i18n="yourPlan">📋 Your Study Plan</h2>
+                        <div class="plan-meta">
+                            <span class="meta-item" id="totalDays"></span>
+                            <span class="meta-item" id="totalHours"></span>
+                            <span class="meta-item" id="deadlineDisplay"></span>
+                            <span class="meta-item" id="progressDisplay">📊 Progress: 0%</span>
+                        </div>
                     </div>
                     
-                    <div class="file-list" id="fileList"></div>
-                    
-                    <div class="deadline-section">
-                        <label for="deadlineInput">📅 Study Deadline</label>
-                        <input type="date" id="deadlineInput" required>
+                    <div class="summary-card" id="summaryCard">
+                        <h3 data-i18n="summary">🎯 Summary</h3>
+                        <div id="summaryContent"></div>
                     </div>
                     
-                    <div class="hours-section">
-                        <label for="hoursInput">⏰ Daily Study Hours</label>
-                        <input type="number" id="hoursInput" min="1" max="12" value="3" required>
+                    <div class="schedule-container" id="scheduleContainer">
+                        <h3 data-i18n="schedule">📅 Day-by-Day Schedule</h3>
+                        <div class="timeline" id="timeline"></div>
                     </div>
                     
-                    <button class="generate-btn" id="generateBtn" disabled>
-                        <span class="btn-text">Generate Study Plan</span>
-                        <span class="btn-loading" hidden>Generating...</span>
-                    </button>
-                </div>
-            </section>
-
-            <!-- Loading Section -->
-            <section class="loading-section" id="loadingSection" hidden>
-                <div class="loading-card">
-                    <div class="spinner"></div>
-                    <h3>Creating your study plan...</h3>
-                    <p>AI is analyzing your materials</p>
-                    <div class="progress-bar">
-                        <div class="progress-fill" id="progressFill"></div>
+                    <div class="actions">
+                        <button class="btn-secondary" id="downloadBtn">📥 <span data-i18n="download">Download Plan</span></button>
+                        <button class="btn-primary" id="newPlanBtn">🔄 <span data-i18n="newPlan">Create New Plan</span></button>
                     </div>
-                </div>
-            </section>
+                </section>
 
-            <!-- Results Section -->
-            <section class="results-section" id="resultsSection" hidden>
-                <div class="results-header">
-                    <h2>📋 Your Study Plan</h2>
-                    <div class="plan-meta">
-                        <span class="meta-item" id="totalDays"></span>
-                        <span class="meta-item" id="totalHours"></span>
-                        <span class="meta-item" id="deadlineDisplay"></span>
+                <!-- Error Section -->
+                <section class="error-section" id="errorSection" hidden>
+                    <div class="error-card">
+                        <div class="error-icon">⚠️</div>
+                        <h3 data-i18n="somethingWrong">Something went wrong</h3>
+                        <p id="errorMessage"></p>
+                        <button class="btn-primary" id="retryBtn" data-i18n="tryAgain">Try Again</button>
                     </div>
-                </div>
-                
-                <div class="summary-card" id="summaryCard">
-                    <h3>🎯 Summary</h3>
-                    <div id="summaryContent"></div>
-                </div>
-                
-                <div class="schedule-container" id="scheduleContainer">
-                    <h3>📅 Day-by-Day Schedule</h3>
-                    <div class="timeline" id="timeline"></div>
-                </div>
-                
-                <div class="actions">
-                    <button class="btn-secondary" id="downloadBtn">📥 Download Plan</button>
-                    <button class="btn-primary" id="newPlanBtn">🔄 Create New Plan</button>
-                </div>
-            </section>
+                </section>
+            </main>
 
-            <!-- Error Section -->
-            <section class="error-section" id="errorSection" hidden>
-                <div class="error-card">
-                    <div class="error-icon">⚠️</div>
-                    <h3>Something went wrong</h3>
-                    <p id="errorMessage"></p>
-                    <button class="btn-primary" id="retryBtn">Try Again</button>
-                </div>
-            </section>
-        </main>
-
-        <footer>
-            <p>Powered by NanoGPT AI • Built for students</p>
-        </footer>
+            <footer>
+                <p data-i18n="poweredBy">Powered by NanoGPT AI • Built for students</p>
+            </footer>
+        </div>
     </div>
 
     <script src="app.js"></script>
