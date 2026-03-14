@@ -1,9 +1,7 @@
 name = "student-study-planner"
 compatibility_date = "2024-01-01"
+pages_build_output_dir = "public"
 
 # Cloudflare Pages configuration
 [env.production]
 vars = { ENVIRONMENT = "production" }
-
-# Secrets (set via wrangler secret put)
-# NANOGPT_API_KEY
