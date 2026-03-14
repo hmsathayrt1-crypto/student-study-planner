@@ -519,7 +519,8 @@ async function generateStudyPlan() {
         const requestData = {
             studyMaterials: combinedText.substring(0, 100000),
             deadline: elements.deadlineInput.value,
-            dailyHours: parseInt(elements.hoursInput.value) || 3
+            dailyHours: parseInt(elements.hoursInput.value) || 3,
+            language: state.currentLanguage
         };
         
         const response = await fetch('/api/generate-plan', {

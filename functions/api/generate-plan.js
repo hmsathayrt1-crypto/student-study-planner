@@ -1,6 +1,6 @@
 /**
  * Student Study Planner - Cloudflare Worker API
- * Generates study plans using NanoGPT AI
+ * Generates study plans using NanoGPT AI - Supports English and Arabic
  */
 
 export async function onRequestPost(context) {
@@ -9,12 +9,12 @@ export async function onRequestPost(context) {
     
     // Parse request body
     const body = await request.json();
-    const { studyMaterials, deadline, dailyHours } = body;
+    const { studyMaterials, deadline, dailyHours, language = 'en' } = body;
     
     // Validate input
     if (!studyMaterials || !deadline) {
       return new Response(
-        JSON.stringify({ error: 'Missing required fields: studyMaterials and deadline are required' }),
+        JSON.stringify({ error: language === 'ar' ? 'الحقول المطلوبة مفقودة' : 'Missing required fields: studyMaterials and deadline are required' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -26,7 +26,7 @@ export async function onRequestPost(context) {
     
     if (daysUntilDeadline < 1) {
       return new Response(
-        JSON.stringify({ error: 'Deadline must be in the future' }),
+        JSON.stringify({ error: language === 'ar' ? 'الموعد يجب أن يكون في المستقبل' : 'Deadline must be in the future' }),
         { status: 400, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -36,6 +36,7 @@ export async function onRequestPost(context) {
       studyMaterials,
       daysUntilDeadline,
       dailyHours || 3,
+      language,
       env.NANOGPT_API_KEY
     );
     
@@ -46,6 +47,7 @@ export async function onRequestPost(context) {
         totalDays: daysUntilDeadline,
         totalHours: daysUntilDeadline * (dailyHours || 3),
         deadline: deadline,
+        language: language,
         ...studyPlan
       }),
       { 
@@ -87,61 +89,30 @@ export async function onRequestOptions() {
 /**
  * Generate study plan using NanoGPT AI API
  */
-async function generateStudyPlanWithAI(studyMaterials, daysUntilDeadline, dailyHours, apiKey) {
-  // Create the prompt for the AI
-  const prompt = createStudyPlanPrompt(studyMaterials, daysUntilDeadline, dailyHours);
+async function generateStudyPlanWithAI(studyMaterials, daysUntilDeadline, dailyHours, language, apiKey) {
+  const isArabic = language === 'ar';
   
-  // Define the JSON schema for structured output
-  const jsonSchema = {
-    name: "study_plan",
-    strict: true,
-    schema: {
-      type: "object",
-      properties: {
-        summary: {
-          type: "string",
-          description: "A comprehensive summary of the study materials and approach"
-        },
-        schedule: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              day: {
-                type: "string",
-                description: "Day identifier (e.g., 'Day 1', 'Day 2')"
-              },
-              date: {
-                type: "string",
-                description: "ISO date string for this day"
-              },
-              topics: {
-                type: "array",
-                items: { type: "string" },
-                description: "List of topics to cover on this day"
-              },
-              tasks: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    description: { type: "string" },
-                    duration: { type: "number" }
-                  },
-                  required: ["description", "duration"]
-                },
-                description: "List of specific tasks with durations in minutes"
-              }
-            },
-            required: ["day", "date", "topics", "tasks"]
-          }
-        }
-      },
-      required: ["summary", "schedule"]
-    }
-  };
+  // Calculate dates
+  const totalMinutes = dailyHours * 60;
+  const today = new Date();
+  const dates = [];
   
-  // Call NanoGPT API
+  for (let i = 0; i < daysUntilDeadline; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() + i);
+    dates.push(date.toISOString().split('T')[0]);
+  }
+  
+  // Create appropriate prompt based on language
+  const userMessage = isArabic 
+    ? createArabicPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates)
+    : createEnglishPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates);
+  
+  const systemMessage = isArabic
+    ? 'أنت مخطط تعليمي خبير. أنشئ خطط دراسية يومية مفصلة. يجب أن تكون الإجابة باللغة العربية فقط. استخدم JSON format.'
+    : 'You are an expert educational planner. Create detailed day-by-day study plans. Respond in English only. Use JSON format.';
+  
+  // Call NanoGPT API without JSON schema for better language support
   const response = await fetch('https://nano-gpt.com/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -151,19 +122,9 @@ async function generateStudyPlanWithAI(studyMaterials, daysUntilDeadline, dailyH
     body: JSON.stringify({
       model: 'moonshotai/kimi-k2.5',
       messages: [
-        {
-          role: 'system',
-          content: 'You are an expert educational planner and study coach. Your task is to analyze study materials and create detailed, actionable day-by-day study plans. Be specific, practical, and motivating.'
-        },
-        {
-          role: 'user',
-          content: prompt
-        }
+        { role: 'system', content: systemMessage },
+        { role: 'user', content: userMessage }
       ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: jsonSchema
-      },
       temperature: 0.7,
       max_tokens: 4000
     })
@@ -195,52 +156,80 @@ async function generateStudyPlanWithAI(studyMaterials, daysUntilDeadline, dailyH
     content = objectMatch[1];
   }
   
-  const studyPlan = JSON.parse(content);
-  
-  return studyPlan;
+  try {
+    const studyPlan = JSON.parse(content);
+    return studyPlan;
+  } catch (parseError) {
+    console.error('JSON parse error:', parseError);
+    console.error('Content received:', content.substring(0, 500));
+    throw new Error(isArabic ? 'فشل في معالجة الرد' : 'Failed to parse AI response');
+  }
 }
 
 /**
- * Create the prompt for study plan generation
+ * Create English prompt
  */
-function createStudyPlanPrompt(studyMaterials, daysUntilDeadline, dailyHours) {
+function createEnglishPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates) {
   const totalMinutes = dailyHours * 60;
-  const today = new Date();
-  const dates = [];
   
-  for (let i = 0; i < daysUntilDeadline; i++) {
-    const date = new Date(today);
-    date.setDate(date.getDate() + i);
-    dates.push(date.toISOString().split('T')[0]);
-  }
-  
-  return `Please analyze the following study materials and create a detailed day-by-day study plan.
+  return `Create a detailed study plan based on the following materials.
 
-## STUDY MATERIALS:
+STUDY MATERIALS:
 ${studyMaterials}
 
-## CONSTRAINTS:
-- Total days available: ${daysUntilDeadline} days
+CONSTRAINTS:
+- Days available: ${daysUntilDeadline}
 - Daily study time: ${dailyHours} hours (${totalMinutes} minutes)
-- Total study time available: ${daysUntilDeadline * dailyHours} hours
-- Start date: ${dates[0]}
-- End date: ${dates[dates.length - 1]}
+- Total hours: ${daysUntilDeadline * dailyHours}
 
-## DATES TO USE:
-${dates.map((d, i) => `Day ${i + 1}: ${d}`).join('\n')}
+DATES: ${dates.join(', ')}
 
-## REQUIREMENTS:
-1. Create a comprehensive summary of the materials (key concepts, difficulty areas, prerequisites)
-2. Create a day-by-day schedule covering ALL ${daysUntilDeadline} days
-3. For each day, provide:
-   - Day identifier (e.g., "Day 1", "Day 2")
-   - Date (use the exact dates provided above in ISO format)
-   - 3-5 specific topics to cover
-   - Detailed tasks with estimated durations in minutes (sum should be ~${totalMinutes} minutes per day)
-4. Distribute content evenly across all days
-5. Include review days and practice problems
-6. Make tasks specific and actionable
-7. Balance difficulty throughout the schedule
+Return ONLY a JSON object in this exact format:
+{
+  "summary": "detailed summary in English",
+  "schedule": [
+    {
+      "day": "Day 1",
+      "date": "${dates[0]}",
+      "topics": ["topic 1", "topic 2"],
+      "tasks": [{"description": "task description", "duration": 30}]
+    }
+  ]
+}
 
-IMPORTANT: Return ONLY the JSON object without markdown formatting, code blocks, or additional text.`;
+All text must be in English.`;
+}
+
+/**
+ * Create Arabic prompt
+ */
+function createArabicPrompt(studyMaterials, daysUntilDeadline, dailyHours, dates) {
+  const totalMinutes = dailyHours * 60;
+  
+  return `أنشئ خطة دراسية مفصلة بناءً على المواد التالية.
+
+المواد الدراسية:
+${studyMaterials}
+
+القيود:
+- عدد الأيام المتاحة: ${daysUntilDeadline}
+- وقت الدراسة اليومي: ${dailyHours} ساعات (${totalMinutes} دقيقة)
+- إجمالي الساعات: ${daysUntilDeadline * dailyHours}
+
+التواريخ: ${dates.join(', ')}
+
+أعد JSON object فقط بهذا التنسيق:
+{
+  "summary": "ملخص تفصيلي بالعربية",
+  "schedule": [
+    {
+      "day": "اليوم 1",
+      "date": "${dates[0]}",
+      "topics": ["الموضوع 1", "الموضوع 2"],
+      "tasks": [{"description": "وصف المهمة", "duration": 30}]
+    }
+  ]
+}
+
+يجب أن يكون كل النص باللغة العربية فقط.`;
 }
