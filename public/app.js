@@ -266,18 +266,24 @@ function deleteSession(sessionId) {
     const t = translations[state.currentLanguage];
     if (!confirm(t.confirmDelete)) return;
     
+    // Remove the session
     state.sessions = state.sessions.filter(s => s.id !== sessionId);
     
+    // If we deleted the current session
     if (state.currentSessionId === sessionId) {
         if (state.sessions.length > 0) {
+            // Switch to another session
             loadSession(state.sessions[0].id);
         } else {
+            // No sessions left - create a new one
+            state.currentSessionId = null;
             createNewSession();
         }
+    } else {
+        // Just re-render if we deleted a non-active session
+        renderSessionsList();
+        saveSessions();
     }
-    
-    renderSessionsList();
-    saveSessions();
 }
 
 function renderSessionsList() {
@@ -366,6 +372,9 @@ function initEventListeners() {
     elements.newSessionBtn.addEventListener('click', createNewSession);
     elements.deleteSessionBtn.addEventListener('click', () => deleteSession(state.currentSessionId));
     
+    // Initialize sidebar close handlers
+    initSidebarCloseHandlers();
+    
     // Language
     document.querySelectorAll('.lang-btn').forEach(btn => {
         btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
@@ -374,6 +383,28 @@ function initEventListeners() {
 
 function toggleSidebar() {
     elements.sidebar.classList.toggle('open');
+}
+
+// Close sidebar when clicking on main wrapper
+function initSidebarCloseHandlers() {
+    // Close when clicking on main wrapper
+    const mainWrapper = document.querySelector('.main-wrapper');
+    if (mainWrapper) {
+        mainWrapper.addEventListener('click', (e) => {
+            if (elements.sidebar.classList.contains('open') && 
+                !elements.sidebar.contains(e.target) && 
+                !elements.menuToggle.contains(e.target)) {
+                elements.sidebar.classList.remove('open');
+            }
+        });
+    }
+    
+    // Close when pressing Escape key
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && elements.sidebar.classList.contains('open')) {
+            elements.sidebar.classList.remove('open');
+        }
+    });
 }
 
 // Drag and drop
