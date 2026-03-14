@@ -3,7 +3,10 @@
  * Tests the study plan generation functionality
  */
 
-const NANOGPT_API_KEY = 'sk-nano-19b7be94-162e-4290-a893-4dc90c7c73c9';
+const NANOGPT_API_KEY = process.env.NANOGPT_API_KEY;
+if (!NANOGPT_API_KEY) {
+  throw new Error('NANOGPT_API_KEY environment variable is required');
+}
 
 async function testNanoGPTAPI() {
   console.log('🧪 Testing NanoGPT API integration...\n');

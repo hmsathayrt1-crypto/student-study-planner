@@ -15,92 +15,203 @@ const MODELS = {
   fallback: 'moonshotai/kimi-k2.5'
 };
 
+const RATE_LIMIT = {
+  windowMs: 60_000,
+  maxRequests: 40
+};
+
+const rateLimitStore = new Map();
+
 export async function onRequestPost(context) {
+  const { request, env } = context;
+  const origin = request.headers.get('Origin') || '';
+  const allowedOrigins = parseAllowedOrigins(env);
+  const corsHeaders = getCorsHeaders(origin, allowedOrigins);
+
   try {
-    const { request, env } = context;
-    
-    // Parse request body
-    const body = await request.json();
-    const { 
-      studyMaterials, 
-      deadline, 
-      dailyHours, 
+    // Basic origin check for browser callers
+    if (origin && !isOriginAllowed(origin, allowedOrigins)) {
+      return new Response(JSON.stringify({ error: 'Origin not allowed' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    // Lightweight per-IP rate limiting (best effort)
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    if (!checkRateLimit(ip)) {
+      return new Response(JSON.stringify({ error: 'Too many requests' }), {
+        status: 429,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    let body;
+    try {
+      body = await request.json();
+    } catch {
+      return new Response(JSON.stringify({ error: 'Invalid JSON payload' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
+    const {
+      studyMaterials,
+      deadline,
+      dailyHours,
       language = 'en',
       task = 'plan' // 'plan', 'quiz', 'mindmap', 'feedback'
     } = body;
-    
-    // Validate input
-    if (!studyMaterials) {
+
+    if (!studyMaterials || typeof studyMaterials !== 'string') {
       return new Response(
         JSON.stringify({ error: language === 'ar' ? 'المواد الدراسية مطلوبة' : 'Study materials are required' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
+        { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
       );
     }
-    
+
+    const apiKey = env.NANOGPT_API_KEY;
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'Server not configured (missing API key)' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json', ...corsHeaders }
+      });
+    }
+
     let result;
-    
-    // Route to appropriate handler based on task
+
     switch (task) {
-      case 'plan':
-        result = await generateStudyPlan(studyMaterials, deadline, dailyHours, language, env.NANOGPT_API_KEY);
+      case 'plan': {
+        if (!deadline) {
+          return new Response(
+            JSON.stringify({ error: language === 'ar' ? 'تاريخ الموعد مطلوب' : 'Deadline is required for plan generation' }),
+            { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+          );
+        }
+        const parsedHours = Number(dailyHours ?? 3);
+        if (!Number.isFinite(parsedHours) || parsedHours < 1 || parsedHours > 12) {
+          return new Response(
+            JSON.stringify({ error: language === 'ar' ? 'ساعات الدراسة اليومية يجب أن تكون بين 1 و 12' : 'dailyHours must be between 1 and 12' }),
+            { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+          );
+        }
+        result = await generateStudyPlan(studyMaterials, deadline, parsedHours, language, apiKey);
         break;
+      }
       case 'quiz':
-        result = await generateQuiz(studyMaterials, language, env.NANOGPT_API_KEY);
+        result = await generateQuiz(studyMaterials, language, apiKey);
         break;
       case 'mindmap':
-        result = await generateMindMap(studyMaterials, language, env.NANOGPT_API_KEY);
+        result = await generateMindMap(studyMaterials, language, apiKey);
         break;
       case 'feedback':
-        result = await analyzeFeedback(studyMaterials, language, env.NANOGPT_API_KEY);
+        result = await analyzeFeedback(studyMaterials, language, apiKey);
         break;
       default:
         return new Response(
           JSON.stringify({ error: 'Invalid task type' }),
-          { status: 400, headers: { 'Content-Type': 'application/json' } }
+          { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
         );
     }
-    
+
     return new Response(
       JSON.stringify({
         success: true,
-        task: task,
+        task,
         model: result.model,
         ...result.data
       }),
-      { 
-        status: 200, 
-        headers: { 
+      {
+        status: 200,
+        headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        } 
+          'Cache-Control': 'no-store',
+          ...corsHeaders
+        }
       }
     );
-    
+
   } catch (error) {
     console.error('Error:', error);
     return new Response(
       JSON.stringify({ error: error.message || 'Internal server error' }),
-      { 
-        status: 500, 
-        headers: { 
+      {
+        status: 500,
+        headers: {
           'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*'
-        } 
+          ...corsHeaders
+        }
       }
     );
   }
 }
 
 // Handle CORS preflight
-export async function onRequestOptions() {
+export async function onRequestOptions(context) {
+  const { request, env } = context;
+  const origin = request.headers.get('Origin') || '';
+  const allowedOrigins = parseAllowedOrigins(env);
+  const corsHeaders = getCorsHeaders(origin, allowedOrigins);
+
   return new Response(null, {
     status: 204,
     headers: {
-      'Access-Control-Allow-Origin': '*',
+      ...corsHeaders,
       'Access-Control-Allow-Methods': 'POST, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type'
     }
   });
+}
+
+function parseAllowedOrigins(env) {
+  const raw = env.ALLOWED_ORIGINS || 'https://student-study-planner.pages.dev,*.student-study-planner.pages.dev';
+  return raw.split(',').map(x => x.trim()).filter(Boolean);
+}
+
+function isOriginAllowed(origin, allowedOrigins) {
+  if (!origin) return true;
+  try {
+    const originUrl = new URL(origin);
+    return allowedOrigins.some(allowed => {
+      if (allowed.startsWith('*.')) {
+        const suffix = allowed.slice(1); // ".example.com"
+        return originUrl.hostname.endsWith(suffix);
+      }
+      return origin === allowed;
+    });
+  } catch {
+    return false;
+  }
+}
+
+function getCorsHeaders(origin, allowedOrigins) {
+  const allowOrigin = isOriginAllowed(origin, allowedOrigins)
+    ? (origin || allowedOrigins[0] || 'https://student-study-planner.pages.dev')
+    : (allowedOrigins[0] || 'https://student-study-planner.pages.dev');
+
+  return {
+    'Access-Control-Allow-Origin': allowOrigin,
+    'Vary': 'Origin'
+  };
+}
+
+function checkRateLimit(ip) {
+  const now = Date.now();
+  const entry = rateLimitStore.get(ip);
+
+  if (!entry || now - entry.start > RATE_LIMIT.windowMs) {
+    rateLimitStore.set(ip, { start: now, count: 1 });
+    return true;
+  }
+
+  if (entry.count >= RATE_LIMIT.maxRequests) {
+    return false;
+  }
+
+  entry.count += 1;
+  rateLimitStore.set(ip, entry);
+  return true;
 }
 
 /**
@@ -108,19 +219,32 @@ export async function onRequestOptions() {
  */
 async function generateStudyPlan(studyMaterials, deadline, dailyHours, language, apiKey) {
   const isArabic = language === 'ar';
+
+  if (!deadline) {
+    throw new Error(isArabic ? 'تاريخ الموعد مطلوب' : 'Deadline is required');
+  }
+
+  const parsedHours = Number(dailyHours);
+  if (!Number.isFinite(parsedHours) || parsedHours < 1 || parsedHours > 12) {
+    throw new Error(isArabic ? 'ساعات الدراسة اليومية يجب أن تكون بين 1 و 12' : 'dailyHours must be between 1 and 12');
+  }
   
   // Calculate dates
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const deadlineDate = new Date(deadline);
+  if (Number.isNaN(deadlineDate.getTime())) {
+    throw new Error(isArabic ? 'صيغة التاريخ غير صالحة' : 'Invalid deadline format');
+  }
+
   const daysUntilDeadline = Math.ceil((deadlineDate - today) / (1000 * 60 * 60 * 24));
   
-  if (daysUntilDeadline < 1) {
+  if (!Number.isFinite(daysUntilDeadline) || daysUntilDeadline < 1) {
     throw new Error(isArabic ? 'الموعد يجب أن يكون في المستقبل' : 'Deadline must be in the future');
   }
   
   const actualDays = Math.min(daysUntilDeadline, 90);
-  const totalMinutes = dailyHours * 60;
+  const totalMinutes = parsedHours * 60;
   const dates = [];
   
   for (let i = 0; i < actualDays; i++) {
@@ -130,8 +254,8 @@ async function generateStudyPlan(studyMaterials, deadline, dailyHours, language,
   }
   
   const prompt = isArabic 
-    ? createArabicPlanPrompt(studyMaterials, actualDays, dailyHours, dates, totalMinutes)
-    : createEnglishPlanPrompt(studyMaterials, actualDays, dailyHours, dates, totalMinutes);
+    ? createArabicPlanPrompt(studyMaterials, actualDays, parsedHours, dates, totalMinutes)
+    : createEnglishPlanPrompt(studyMaterials, actualDays, parsedHours, dates, totalMinutes);
   
   const systemMessage = isArabic
     ? 'أنت مخطط تعليمي خبير. أنشئ خطط دراسية يومية مفصلة. يجب أن تكون الإجابة باللغة العربية فقط.'
@@ -156,7 +280,7 @@ async function generateStudyPlan(studyMaterials, deadline, dailyHours, language,
     model: MODELS.complex,
     data: {
       totalDays: actualDays,
-      totalHours: actualDays * dailyHours,
+      totalHours: actualDays * parsedHours,
       deadline: deadline,
       language: language,
       ...studyPlan

@@ -124,6 +124,7 @@ const state = {
     isGenerating: false,
     currentLanguage: localStorage.getItem('studyPlanner_lang') || 'en',
     sessions: [],
+    sessionCounter: Number(localStorage.getItem('studyPlanner_sessionCounter') || 0),
     currentSessionId: null,
     studyPlan: null,
     completedTasks: new Set(),
@@ -239,40 +240,54 @@ function setLanguage(lang) {
 // Session management
 function initSessions() {
     const saved = localStorage.getItem('studyPlanner_sessions');
+
     if (saved) {
         try {
             const parsed = JSON.parse(saved);
-            state.sessions = parsed.sessions || [];
-            state.currentSessionId = parsed.currentSessionId;
-            
-            // Load current session data
-            if (state.currentSessionId) {
+            state.sessions = Array.isArray(parsed.sessions) ? parsed.sessions : [];
+            state.sessionCounter = Number(parsed.sessionCounter || 0);
+
+            // Keep counter monotonic even if storage was partially reset
+            const maxExistingNumber = state.sessions.reduce((max, s) => {
+                const match = (s.name || '').match(/\d+/);
+                return match ? Math.max(max, parseInt(match[0], 10)) : max;
+            }, 0);
+            state.sessionCounter = Math.max(state.sessionCounter, maxExistingNumber);
+
+            if (state.sessions.length > 0) {
+                const requestedId = parsed.currentSessionId;
+                const exists = state.sessions.some(s => s.id === requestedId);
+                state.currentSessionId = exists ? requestedId : state.sessions[0].id;
                 loadSession(state.currentSessionId);
+            } else {
+                createNewSession();
             }
         } catch (e) {
             console.error('Failed to load sessions:', e);
+            state.sessions = [];
+            state.sessionCounter = 0;
             createNewSession();
         }
     } else {
+        state.sessions = [];
+        state.sessionCounter = Number(localStorage.getItem('studyPlanner_sessionCounter') || 0);
         createNewSession();
     }
-    
+
     renderSessionsList();
 }
 
 function createNewSession() {
     const t = translations[state.currentLanguage];
-    
-    // Calculate next session number based on existing sessions
-    const maxNumber = state.sessions.reduce((max, s) => {
-        const match = s.name.match(/\d+/);
-        return match ? Math.max(max, parseInt(match[0])) : max;
-    }, 0);
-    const nextNumber = maxNumber + 1;
-    
+
+    if (!Number.isFinite(state.sessionCounter)) {
+        state.sessionCounter = 0;
+    }
+    state.sessionCounter += 1;
+
     const newSession = {
         id: 'session_' + Date.now(),
-        name: `${t.newSession} ${nextNumber}`,
+        name: `${t.newSession} ${state.sessionCounter}`,
         createdAt: new Date().toISOString(),
         files: [],
         extractedTexts: [],
@@ -280,41 +295,46 @@ function createNewSession() {
         dailyHours: 3,
         studyPlan: null,
         completedTasks: [],
-        dailyFeedback: {} // Store daily feedback
+        dailyFeedback: {}
     };
-    
+
     state.sessions.unshift(newSession);
     state.currentSessionId = newSession.id;
-    
-    // Reset UI
+
     resetUI();
+    elements.currentSessionName.textContent = newSession.name;
     renderSessionsList();
     saveSessions();
-    
+
     return newSession;
 }
 
 function loadSession(sessionId) {
     const session = state.sessions.find(s => s.id === sessionId);
     if (!session) return;
-    
+
     state.currentSessionId = sessionId;
     state.files = session.files || [];
     state.extractedTexts = session.extractedTexts || [];
     state.studyPlan = session.studyPlan || null;
     state.completedTasks = new Set(session.completedTasks || []);
-    
+
     // Restore UI state
     elements.deadlineInput.value = session.deadline || '';
     elements.hoursInput.value = session.dailyHours || 3;
-    elements.currentSessionName.textContent = session.name;
-    
+    elements.currentSessionName.textContent = session.name || translations[state.currentLanguage].untitledSession;
+
     renderFileList();
-    
+
     if (state.studyPlan) {
         displayResults(state.studyPlan);
+    } else {
+        elements.uploadSection.hidden = false;
+        elements.loadingSection.hidden = true;
+        elements.resultsSection.hidden = true;
+        elements.errorSection.hidden = true;
     }
-    
+
     renderSessionsList();
 }
 
@@ -329,10 +349,12 @@ function saveSessions() {
         session.completedTasks = Array.from(state.completedTasks);
         session.name = elements.currentSessionName.textContent;
     }
-    
+
+    localStorage.setItem('studyPlanner_sessionCounter', String(state.sessionCounter || 0));
     localStorage.setItem('studyPlanner_sessions', JSON.stringify({
         sessions: state.sessions,
-        currentSessionId: state.currentSessionId
+        currentSessionId: state.currentSessionId,
+        sessionCounter: state.sessionCounter || 0
     }));
 }
 
@@ -343,36 +365,25 @@ function autoSave() {
 }
 
 function deleteSession(sessionId) {
-    console.log('Deleting session:', sessionId);
     const t = translations[state.currentLanguage];
-    if (!confirm(t.confirmDelete)) {
-        console.log('Deletion cancelled by user');
+    if (!sessionId) return;
+    if (!confirm(t.confirmDelete)) return;
+
+    state.sessions = state.sessions.filter(s => s.id !== sessionId);
+
+    if (state.sessions.length === 0) {
+        state.currentSessionId = null;
+        createNewSession();
         return;
     }
-    
-    // Remove the session
-    state.sessions = state.sessions.filter(s => s.id !== sessionId);
-    console.log('Sessions after deletion:', state.sessions.length);
-    
-    // If we deleted the current session
+
     if (state.currentSessionId === sessionId) {
-        console.log('Deleted current session');
-        if (state.sessions.length > 0) {
-            // Switch to another session
-            console.log('Switching to first available session');
-            loadSession(state.sessions[0].id);
-        } else {
-            // No sessions left - create a new one
-            console.log('No sessions left, creating new one');
-            state.currentSessionId = null;
-            createNewSession();
-        }
-    } else {
-        // Just re-render if we deleted a non-active session
-        console.log('Deleted non-active session, just re-rendering');
-        renderSessionsList();
-        saveSessions();
+        state.currentSessionId = state.sessions[0].id;
+        loadSession(state.currentSessionId);
     }
+
+    renderSessionsList();
+    saveSessions();
 }
 
 function renderSessionsList() {
@@ -408,10 +419,11 @@ function renderSessionsList() {
         btn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            console.log('Delete button clicked for session:', btn.dataset.sessionId);
             deleteSession(btn.dataset.sessionId);
         });
     });
+
+    updateSessionControls();
 }
 
 function resetUI() {
@@ -424,7 +436,8 @@ function resetUI() {
     elements.fileList.innerHTML = '';
     elements.deadlineInput.value = '';
     elements.hoursInput.value = '3';
-    elements.currentSessionName.textContent = translations[state.currentLanguage].newSession + ' ' + state.sessions.length;
+    const activeSession = state.sessions.find(s => s.id === state.currentSessionId);
+    elements.currentSessionName.textContent = activeSession?.name || translations[state.currentLanguage].untitledSession;
     
     elements.uploadSection.hidden = false;
     elements.loadingSection.hidden = true;
@@ -470,6 +483,15 @@ function initEventListeners() {
     document.querySelectorAll('.lang-btn').forEach(btn => {
         btn.addEventListener('click', () => setLanguage(btn.dataset.lang));
     });
+}
+
+function updateSessionControls() {
+    if (!elements.deleteSessionBtn) return;
+
+    const canDelete = state.sessions.length > 1;
+    elements.deleteSessionBtn.disabled = !canDelete;
+    elements.deleteSessionBtn.style.opacity = canDelete ? '1' : '0.5';
+    elements.deleteSessionBtn.style.cursor = canDelete ? 'pointer' : 'not-allowed';
 }
 
 function toggleSidebar() {
@@ -598,6 +620,15 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function safeCssColor(value) {
+    if (typeof value !== 'string') return '#6366f1';
+    const trimmed = value.trim();
+    const hexOk = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.test(trimmed);
+    const rgbOk = /^rgb\((\s*\d+\s*,){2}\s*\d+\s*\)$/.test(trimmed);
+    const namedOk = /^[a-zA-Z]{3,20}$/.test(trimmed);
+    return (hexOk || rgbOk || namedOk) ? trimmed : '#6366f1';
+}
+
 function updateGenerateButton() {
     const hasFiles = state.files.length > 0;
     const hasDeadline = elements.deadlineInput.value !== '';
@@ -649,8 +680,9 @@ async function generateStudyPlan() {
         const requestData = {
             studyMaterials: combinedText.substring(0, 100000),
             deadline: elements.deadlineInput.value,
-            dailyHours: parseInt(elements.hoursInput.value) || 3,
-            language: state.currentLanguage
+            dailyHours: parseInt(elements.hoursInput.value, 10) || 3,
+            language: state.currentLanguage,
+            task: 'plan'
         };
         
         const response = await fetch('/api/generate-plan', {
@@ -849,6 +881,7 @@ function resetApp() {
         localStorage.removeItem('studyPlanner_streak');
         localStorage.removeItem('studyPlanner_badges');
         localStorage.removeItem('studyPlanner_lastStudyDate');
+        localStorage.removeItem('studyPlanner_sessionCounter');
         window.location.reload();
     }
 }
@@ -860,9 +893,15 @@ function openFeedbackModal(dayIndex) {
     const t = translations[state.currentLanguage];
     const currentSession = state.sessions.find(s => s.id === state.currentSessionId);
     const existingFeedback = currentSession?.dailyFeedback?.[dayIndex] || {};
-    
+
+    const safeExistingText = escapeHtml(existingFeedback.text || '');
+    const safeExistingVoice = existingFeedback.voice ? escapeHtml(existingFeedback.voice) : '';
+    const safeExistingPhoto = existingFeedback.photo ? escapeHtml(existingFeedback.photo) : '';
+
     const modal = document.createElement('div');
     modal.className = 'modal';
+    modal.dataset.voiceData = existingFeedback.voice || '';
+
     modal.innerHTML = `
         <div class="modal-content">
             <div class="modal-header">
@@ -875,62 +914,129 @@ function openFeedbackModal(dayIndex) {
                     <button class="feedback-tab" data-tab="voice">${t.voiceNote}</button>
                     <button class="feedback-tab" data-tab="photo">${t.photo}</button>
                 </div>
-                
+
                 <div class="feedback-content" id="text-content">
-                    <textarea class="feedback-textarea" placeholder="${state.currentLanguage === 'ar' ? 'اكتب ملاحظاتك عن هذا اليوم... ما تعلمته؟ ما الصعوبات التي واجهتك؟' : 'Write your notes about today... What did you learn? What difficulties did you face?'}">${existingFeedback.text || ''}</textarea>
+                    <textarea class="feedback-textarea" placeholder="${state.currentLanguage === 'ar' ? 'اكتب ملاحظاتك عن هذا اليوم... ما تعلمته؟ ما الصعوبات التي واجهتك؟' : 'Write your notes about today... What did you learn? What difficulties did you face?'}">${safeExistingText}</textarea>
                 </div>
-                
+
                 <div class="feedback-content hidden" id="voice-content">
                     <div class="voice-recorder">
                         <button class="btn-record" id="recordBtn">🎤 ${state.currentLanguage === 'ar' ? 'ابدأ التسجيل' : 'Start Recording'}</button>
                         <div class="recording-status" id="recordingStatus"></div>
-                        ${existingFeedback.voice ? '<audio controls src="' + existingFeedback.voice + '"></audio>' : ''}
+                        <audio id="voicePreview" controls ${safeExistingVoice ? '' : 'hidden'} src="${safeExistingVoice}"></audio>
                     </div>
                 </div>
-                
+
                 <div class="feedback-content hidden" id="photo-content">
                     <input type="file" accept="image/*" capture="environment" class="feedback-photo-input" id="photoInput">
                     <div class="photo-preview" id="photoPreview">
-                        ${existingFeedback.photo ? '<img src="' + existingFeedback.photo + '" style="max-width: 100%; margin-top: 10px;">' : ''}
+                        ${safeExistingPhoto ? `<img src="${safeExistingPhoto}" style="max-width: 100%; margin-top: 10px;">` : ''}
                     </div>
                 </div>
-                
+
                 <button class="btn-submit-feedback" onclick="submitFeedback(${dayIndex})">
                     ${t.submitFeedback}
                 </button>
             </div>
         </div>
     `;
-    
+
     document.body.appendChild(modal);
-    
-    // Close modal
-    modal.querySelector('.modal-close').addEventListener('click', () => modal.remove());
+
+    let mediaRecorder = null;
+    let mediaStream = null;
+    let isRecording = false;
+    let audioChunks = [];
+
+    const closeModal = () => {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+        }
+        if (mediaStream) {
+            mediaStream.getTracks().forEach(track => track.stop());
+        }
+        modal.remove();
+    };
+
+    modal.querySelector('.modal-close').addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => {
-        if (e.target === modal) modal.remove();
+        if (e.target === modal) closeModal();
     });
-    
+
     // Tab switching
     modal.querySelectorAll('.feedback-tab').forEach(tab => {
         tab.addEventListener('click', () => {
-            modal.querySelectorAll('.feedback-tab').forEach(t => t.classList.remove('active'));
+            modal.querySelectorAll('.feedback-tab').forEach(x => x.classList.remove('active'));
             modal.querySelectorAll('.feedback-content').forEach(c => c.classList.add('hidden'));
             tab.classList.add('active');
             modal.querySelector(`#${tab.dataset.tab}-content`).classList.remove('hidden');
         });
     });
-    
+
     // Photo preview
     const photoInput = modal.querySelector('#photoInput');
     if (photoInput) {
         photoInput.addEventListener('change', (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    modal.querySelector('#photoPreview').innerHTML = `<img src="${e.target.result}" style="max-width: 100%; margin-top: 10px;">`;
-                };
-                reader.readAsDataURL(file);
+            const file = e.target.files?.[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = (ev) => {
+                modal.querySelector('#photoPreview').innerHTML = `<img src="${ev.target.result}" style="max-width: 100%; margin-top: 10px;">`;
+            };
+            reader.readAsDataURL(file);
+        });
+    }
+
+    // Voice recording (real)
+    const recordBtn = modal.querySelector('#recordBtn');
+    const recordingStatus = modal.querySelector('#recordingStatus');
+    const voicePreview = modal.querySelector('#voicePreview');
+
+    if (recordBtn) {
+        recordBtn.addEventListener('click', async () => {
+            try {
+                if (!isRecording) {
+                    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    mediaRecorder = new MediaRecorder(mediaStream);
+                    audioChunks = [];
+
+                    mediaRecorder.ondataavailable = (event) => {
+                        if (event.data.size > 0) audioChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                            const dataUrl = reader.result;
+                            modal.dataset.voiceData = dataUrl;
+                            voicePreview.src = dataUrl;
+                            voicePreview.hidden = false;
+                        };
+                        reader.readAsDataURL(audioBlob);
+
+                        if (mediaStream) {
+                            mediaStream.getTracks().forEach(track => track.stop());
+                            mediaStream = null;
+                        }
+                    };
+
+                    mediaRecorder.start();
+                    isRecording = true;
+                    recordBtn.classList.add('recording');
+                    recordBtn.textContent = `⏹ ${state.currentLanguage === 'ar' ? 'إيقاف التسجيل' : 'Stop Recording'}`;
+                    recordingStatus.textContent = state.currentLanguage === 'ar' ? 'جاري التسجيل...' : 'Recording...';
+                } else {
+                    mediaRecorder?.stop();
+                    isRecording = false;
+                    recordBtn.classList.remove('recording');
+                    recordBtn.textContent = `🎤 ${state.currentLanguage === 'ar' ? 'ابدأ التسجيل' : 'Start Recording'}`;
+                    recordingStatus.textContent = state.currentLanguage === 'ar' ? 'تم حفظ التسجيل.' : 'Recording saved.';
+                }
+            } catch (err) {
+                recordingStatus.textContent = state.currentLanguage === 'ar'
+                    ? 'تعذر الوصول للميكروفون.'
+                    : 'Could not access microphone.';
             }
         });
     }
@@ -939,30 +1045,34 @@ function openFeedbackModal(dayIndex) {
 // Submit feedback
 function submitFeedback(dayIndex) {
     const modal = document.querySelector('.modal');
-    const text = modal.querySelector('.feedback-textarea').value;
+    if (!modal) return;
+
+    const text = modal.querySelector('.feedback-textarea')?.value || '';
     const photoPreview = modal.querySelector('#photoPreview img');
-    
+    const voiceData = modal.dataset.voiceData || modal.querySelector('#voicePreview')?.src || null;
+
     const currentSession = state.sessions.find(s => s.id === state.currentSessionId);
+    if (!currentSession) return;
     if (!currentSession.dailyFeedback) {
         currentSession.dailyFeedback = {};
     }
-    
+
     currentSession.dailyFeedback[dayIndex] = {
-        text: text,
+        text,
         photo: photoPreview ? photoPreview.src : null,
+        voice: voiceData,
         submitted: true,
         submittedAt: new Date().toISOString()
     };
-    
-    // Award points
+
     addPoints(10);
-    
+
     saveSessions();
-    renderTimeline(state.studyPlan.schedule);
+    if (state.studyPlan?.schedule) {
+        renderTimeline(state.studyPlan.schedule);
+    }
     modal.remove();
-    
-    // Show success message
-    const t = translations[state.currentLanguage];
+
     alert(state.currentLanguage === 'ar' ? 'تم حفظ التقييم بنجاح! +10 نقاط' : 'Feedback saved successfully! +10 points');
 }
 
@@ -1027,23 +1137,23 @@ Tasks: ${day.tasks.map(t => t.description).join(', ')}
                 </div>
                 <div class="modal-body">
                     <div class="quiz-model-info" style="margin-bottom: 1rem; padding: 0.5rem; background: var(--surface-light); border-radius: 8px; font-size: 0.8rem; color: var(--text-muted);">
-                        ${state.currentLanguage === 'ar' ? 'مولد بواسطة:' : 'Generated by:'} ${data.model}
+                        ${state.currentLanguage === 'ar' ? 'مولد بواسطة:' : 'Generated by:'} ${escapeHtml(data.model || '')}
                     </div>
                     <div class="quiz-container">
                         ${questions.map((q, i) => `
-                            <div class="quiz-question" data-question="${i}">
-                                <p class="question-text">${i + 1}. ${q.question}</p>
+                            <div class="quiz-question" data-question="${i}" data-correct="${Number.isInteger(q.correct) ? q.correct : 0}">
+                                <p class="question-text">${i + 1}. ${escapeHtml(q.question || '')}</p>
                                 <div class="quiz-options">
-                                    ${q.options.map((opt, j) => `
+                                    ${(Array.isArray(q.options) ? q.options : []).map((opt, j) => `
                                         <label class="quiz-option">
                                             <input type="radio" name="q${i}" value="${j}">
-                                            <span>${opt}</span>
+                                            <span>${escapeHtml(String(opt))}</span>
                                         </label>
                                     `).join('')}
                                 </div>
                                 <div class="quiz-result" id="result${i}"></div>
                                 <div class="quiz-explanation hidden" id="explanation${i}" style="margin-top: 0.5rem; padding: 0.75rem; background: rgba(99, 102, 241, 0.1); border-radius: 8px; font-size: 0.9rem;">
-                                    <strong>${state.currentLanguage === 'ar' ? 'الشرح:' : 'Explanation:'}</strong> ${q.explanation || ''}
+                                    <strong>${state.currentLanguage === 'ar' ? 'الشرح:' : 'Explanation:'}</strong> ${escapeHtml(q.explanation || '')}
                                 </div>
                             </div>
                         `).join('')}
@@ -1090,13 +1200,13 @@ function openFallbackQuizModal(day, dayIndex) {
             <div class="modal-body">
                 <div class="quiz-container">
                     ${questions.map((q, i) => `
-                        <div class="quiz-question" data-question="${i}">
-                            <p class="question-text">${i + 1}. ${q.question}</p>
+                        <div class="quiz-question" data-question="${i}" data-correct="${Number.isInteger(q.correct) ? q.correct : 0}">
+                            <p class="question-text">${i + 1}. ${escapeHtml(q.question || '')}</p>
                             <div class="quiz-options">
-                                ${q.options.map((opt, j) => `
+                                ${(Array.isArray(q.options) ? q.options : []).map((opt, j) => `
                                     <label class="quiz-option">
                                         <input type="radio" name="q${i}" value="${j}">
-                                        <span>${opt}</span>
+                                        <span>${escapeHtml(String(opt))}</span>
                                     </label>
                                 `).join('')}
                             </div>
@@ -1152,9 +1262,9 @@ function submitQuiz(dayIndex) {
         const resultDiv = q.querySelector(`#result${i}`);
         const explanationDiv = q.querySelector(`#explanation${i}`);
         
-        // Check if explanation exists (API quiz) or use fallback
-        const isCorrect = selected && (explanationDiv ? parseInt(selected.value) === 0 : parseInt(selected.value) === 3);
-        
+        const correctIndex = Number.parseInt(q.dataset.correct || '0', 10);
+        const isCorrect = !!selected && Number.parseInt(selected.value, 10) === correctIndex;
+
         if (isCorrect) {
             correct++;
             resultDiv.innerHTML = '✅ ' + (state.currentLanguage === 'ar' ? 'صحيح!' : 'Correct!');
@@ -1242,22 +1352,22 @@ Tasks: ${day.tasks.map(t => t.description).join('. ')}
                 </div>
                 <div class="modal-body">
                     <div class="mindmap-model-info" style="margin-bottom: 1rem; padding: 0.5rem; background: var(--surface-light); border-radius: 8px; font-size: 0.8rem; color: var(--text-muted);">
-                        ${state.currentLanguage === 'ar' ? 'مولد بواسطة:' : 'Generated by:'} ${mindMap.model}
+                        ${state.currentLanguage === 'ar' ? 'مولد بواسطة:' : 'Generated by:'} ${escapeHtml(mindMap.model || '')}
                     </div>
                     <div class="mindmap-container" style="min-height: 500px;">
-                        <div class="mindmap-center">${mindMap.centralTopic || (state.currentLanguage === 'ar' ? 'اليوم' : 'Day') + ' ' + (dayIndex + 1)}</div>
+                        <div class="mindmap-center">${escapeHtml(mindMap.centralTopic || ((state.currentLanguage === 'ar' ? 'اليوم' : 'Day') + ' ' + (dayIndex + 1)))}</div>
                         ${mindMap.branches ? mindMap.branches.map((branch, i) => `
-                            <div class="mindmap-branch" style="--angle: ${(360 / mindMap.branches.length) * i}deg; border-color: ${branch.color || '#6366f1'}">
-                                <div class="mindmap-node" style="color: ${branch.color || '#6366f1'}">${branch.title}</div>
+                            <div class="mindmap-branch" style="--angle: ${(360 / mindMap.branches.length) * i}deg; border-color: ${safeCssColor(branch.color)}">
+                                <div class="mindmap-node" style="color: ${safeCssColor(branch.color)}">${escapeHtml(branch.title || '')}</div>
                                 ${branch.subBranches ? branch.subBranches.map(sub => `
-                                    <div class="mindmap-leaf">${sub.title}${sub.description ? ': ' + sub.description : ''}</div>
+                                    <div class="mindmap-leaf">${escapeHtml(sub.title || '')}${sub.description ? ': ' + escapeHtml(sub.description) : ''}</div>
                                 `).join('') : ''}
                             </div>
                         `).join('') : day.topics.map((topic, i) => `
                             <div class="mindmap-branch" style="--angle: ${(360 / day.topics.length) * i}deg">
-                                <div class="mindmap-node">${topic}</div>
+                                <div class="mindmap-node">${escapeHtml(topic || '')}</div>
                                 ${day.tasks.slice(i * 2, (i + 1) * 2).map(task => `
-                                    <div class="mindmap-leaf">${task.description.substring(0, 30)}...</div>
+                                    <div class="mindmap-leaf">${escapeHtml((task.description || '').substring(0, 30))}...</div>
                                 `).join('')}
                             </div>
                         `).join('')}
@@ -1308,9 +1418,9 @@ function openFallbackMindMap(day, dayIndex) {
                     <div class="mindmap-center">${state.currentLanguage === 'ar' ? 'اليوم' : 'Day'} ${dayIndex + 1}</div>
                     ${day.topics.map((topic, i) => `
                         <div class="mindmap-branch" style="--angle: ${(360 / day.topics.length) * i}deg">
-                            <div class="mindmap-node">${topic}</div>
+                            <div class="mindmap-node">${escapeHtml(topic || '')}</div>
                             ${day.tasks.slice(i * 2, (i + 1) * 2).map(task => `
-                                <div class="mindmap-leaf">${task.description.substring(0, 30)}...</div>
+                                <div class="mindmap-leaf">${escapeHtml((task.description || '').substring(0, 30))}...</div>
                             `).join('')}
                         </div>
                     `).join('')}
