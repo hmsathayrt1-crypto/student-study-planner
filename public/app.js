@@ -279,16 +279,30 @@ async function generateStudyPlan() {
     state.isGenerating = true;
     elements.uploadSection.hidden = true;
     elements.loadingSection.hidden = false;
+    elements.errorSection.hidden = true;
     
     try {
+        console.log('Starting study plan generation...');
+        
         // Extract text from all files
+        console.log('Extracting text from files...');
         const extractedTexts = await extractTextFromFiles();
         state.extractedTexts = extractedTexts;
+        console.log('Extracted text from', extractedTexts.length, 'files');
         
         // Combine all text
-        const combinedText = extractedTexts
+        let combinedText = extractedTexts
             .map(t => `=== ${t.filename} ===\n${t.content}`)
             .join('\n\n');
+        
+        // Limit text size to avoid API limits (max 100KB)
+        const MAX_LENGTH = 100000;
+        if (combinedText.length > MAX_LENGTH) {
+            console.log('Text too long, truncating...');
+            combinedText = combinedText.substring(0, MAX_LENGTH) + '\n\n[Content truncated due to length]';
+        }
+        
+        console.log('Combined text length:', combinedText.length);
         
         // Prepare request data
         const requestData = {
@@ -296,6 +310,8 @@ async function generateStudyPlan() {
             deadline: elements.deadlineInput.value,
             dailyHours: parseInt(elements.hoursInput.value) || 3
         };
+        
+        console.log('Sending API request...');
         
         // Call API
         const response = await fetch('/api/generate-plan', {
@@ -306,11 +322,16 @@ async function generateStudyPlan() {
             body: JSON.stringify(requestData)
         });
         
+        console.log('API response status:', response.status);
+        
         if (!response.ok) {
+            const errorText = await response.text();
+            console.error('API error response:', errorText);
             throw new Error(`API error: ${response.status} ${response.statusText}`);
         }
         
         const data = await response.json();
+        console.log('API response data:', data);
         
         if (data.error) {
             throw new Error(data.error);
@@ -320,6 +341,8 @@ async function generateStudyPlan() {
         
     } catch (error) {
         console.error('Error generating plan:', error);
+        state.isGenerating = false;
+        elements.loadingSection.hidden = true;
         showError(error.message || 'Failed to generate study plan. Please try again.');
     }
 }
