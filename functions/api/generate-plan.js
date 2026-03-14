@@ -89,6 +89,15 @@ export async function onRequestPost(context) {
             { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
           );
         }
+
+        const deadlineDate = new Date(deadline);
+        if (Number.isNaN(deadlineDate.getTime())) {
+          return new Response(
+            JSON.stringify({ error: language === 'ar' ? 'صيغة التاريخ غير صالحة' : 'Invalid deadline format' }),
+            { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } }
+          );
+        }
+
         const parsedHours = Number(dailyHours ?? 3);
         if (!Number.isFinite(parsedHours) || parsedHours < 1 || parsedHours > 12) {
           return new Response(
