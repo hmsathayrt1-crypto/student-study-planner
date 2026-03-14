@@ -263,24 +263,33 @@ function autoSave() {
 }
 
 function deleteSession(sessionId) {
+    console.log('Deleting session:', sessionId);
     const t = translations[state.currentLanguage];
-    if (!confirm(t.confirmDelete)) return;
+    if (!confirm(t.confirmDelete)) {
+        console.log('Deletion cancelled by user');
+        return;
+    }
     
     // Remove the session
     state.sessions = state.sessions.filter(s => s.id !== sessionId);
+    console.log('Sessions after deletion:', state.sessions.length);
     
     // If we deleted the current session
     if (state.currentSessionId === sessionId) {
+        console.log('Deleted current session');
         if (state.sessions.length > 0) {
             // Switch to another session
+            console.log('Switching to first available session');
             loadSession(state.sessions[0].id);
         } else {
             // No sessions left - create a new one
+            console.log('No sessions left, creating new one');
             state.currentSessionId = null;
             createNewSession();
         }
     } else {
         // Just re-render if we deleted a non-active session
+        console.log('Deleted non-active session, just re-rendering');
         renderSessionsList();
         saveSessions();
     }
@@ -317,7 +326,9 @@ function renderSessionsList() {
     
     elements.sessionsList.querySelectorAll('.session-delete').forEach(btn => {
         btn.addEventListener('click', (e) => {
+            e.preventDefault();
             e.stopPropagation();
+            console.log('Delete button clicked for session:', btn.dataset.sessionId);
             deleteSession(btn.dataset.sessionId);
         });
     });
